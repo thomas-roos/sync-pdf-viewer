@@ -421,6 +421,94 @@
             }
         }
         
+        // Add all the missing functions
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            if (statusDiv) {
+                statusDiv.textContent = message;
+                statusDiv.className = `status ${type}`;
+                statusDiv.style.display = 'block';
+                
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 5000);
+                }
+            }
+        }
+        
+        async function initializePresenter() {
+            try {
+                updateConnectionInfo('Initializing real-time sync...', 'info');
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Create data channel for sending PDF updates
+                dataChannel = peerConnection.createDataChannel('pdfSync', {
+                    ordered: true
+                });
+                
+                dataChannel.onopen = () => {
+                    updateConnectionInfo('Real-time sync ready - QR codes will include connection info', 'success');
+                };
+                
+                // Handle incoming viewer connections
+                peerConnection.ondatachannel = (event) => {
+                    const channel = event.channel;
+                    channel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                };
+                
+                // Monitor connection changes
+                peerConnection.onconnectionstatechange = () => {
+                    updateViewerCount();
+                    if (peerConnection.connectionState === 'connected') {
+                        updateConnectionInfo('Viewer connected via QR code - real-time sync active', 'success');
+                    } else if (peerConnection.connectionState === 'disconnected') {
+                        updateConnectionInfo('Viewer disconnected - QR codes will work normally', 'info');
+                    }
+                };
+                
+                // Create offer for viewers to connect
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                // Wait for ICE gathering to complete
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                // Store connection code for QR code inclusion
+                connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                updateConnectionInfo('Real-time sync initialized - QR codes will auto-connect viewers', 'success');
+                
+            } catch (error) {
+                updateConnectionInfo('Failed to initialize real-time sync: ' + error.message, 'error');
+                console.error('WebRTC initialization error:', error);
+            }
+        }
+        
+        function updateConnectionInfo(message, type) {
+            const connectionInfo = document.getElementById('connectionInfo');
+            const connectionText = document.getElementById('connectionText');
+            
+            if (connectionText) {
+                connectionText.textContent = message;
+            }
+            if (connectionInfo) {
+                connectionInfo.className = type;
+            }
+        }
+        
         // Set device name based on user agent
         const deviceName = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 
             'Mobile-' + Math.random().toString(36).substr(2, 3) : 
