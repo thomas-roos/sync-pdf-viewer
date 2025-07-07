@@ -6,15 +6,90 @@
     <title>PDF Sync for GitHub Pages</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
-        // Fallback QR code generation if CDN fails
-        if (typeof QRCode === 'undefined') {
-            console.warn('Primary QR Code library failed to load, trying alternative...');
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
-            script.onerror = function() {
+        // Multiple fallback QR code libraries
+        let qrLibraryLoaded = false;
+        
+        function checkQRLibrary() {
+            if (typeof QRCode !== 'undefined') {
+                qrLibraryLoaded = true;
+                console.log('QR Code library loaded successfully');
+                return true;
+            }
+            return false;
+        }
+        
+        // Try primary library first
+        if (!checkQRLibrary()) {
+            console.warn('Primary QR Code library failed to load, trying alternatives...');
+            
+            // Fallback 1: unpkg CDN
+            const script1 = document.createElement('script');
+            script1.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
+            script1.onload = function() {
+                if (checkQRLibrary()) {
+                    console.log('Fallback 1 QR library loaded');
+                } else {
+                    tryFallback2();
+                }
+            };
+            script1.onerror = function() {
+                console.warn('Fallback 1 failed, trying fallback 2...');
+                tryFallback2();
+            };
+            document.head.appendChild(script1);
+        }
+        
+        function tryFallback2() {
+            // Fallback 2: jsDelivr CDN
+            const script2 = document.createElement('script');
+            script2.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js';
+            script2.onload = function() {
+                if (checkQRLibrary()) {
+                    console.log('Fallback 2 QR library loaded');
+                } else {
+                    tryFallback3();
+                }
+            };
+            script2.onerror = function() {
+                console.warn('Fallback 2 failed, trying fallback 3...');
+                tryFallback3();
+            };
+            document.head.appendChild(script2);
+        }
+        
+        function tryFallback3() {
+            // Fallback 3: Different QR library
+            const script3 = document.createElement('script');
+            script3.src = 'https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js';
+            script3.onload = function() {
+                if (typeof QRious !== 'undefined') {
+                    console.log('Fallback 3 QRious library loaded');
+                    // Create QRCode compatibility wrapper
+                    window.QRCode = {
+                        toCanvas: function(canvas, text, options, callback) {
+                            try {
+                                const qr = new QRious({
+                                    element: canvas,
+                                    value: text,
+                                    size: options.width || 256,
+                                    background: options.color?.light || '#FFFFFF',
+                                    foreground: options.color?.dark || '#000000'
+                                });
+                                callback(null);
+                            } catch (error) {
+                                callback(error);
+                            }
+                        }
+                    };
+                    qrLibraryLoaded = true;
+                } else {
+                    console.error('All QR Code libraries failed to load');
+                }
+            };
+            script3.onerror = function() {
                 console.error('All QR Code libraries failed to load');
             };
-            document.head.appendChild(script);
+            document.head.appendChild(script3);
         }
     </script>
     <style>
@@ -1061,7 +1136,7 @@
                 return;
             }
             
-            // Try to generate QR code
+            // Try to generate QR code with multiple attempts
             console.log('QRCode library available:', typeof QRCode !== 'undefined');
             
             if (typeof QRCode !== 'undefined') {
@@ -1069,7 +1144,8 @@
                 
                 if (!canvas) {
                     console.error('QR code canvas not found');
-                    showStatus('QR code canvas not found', 'error');
+                    showQRFallback();
+                    showStatus('QR code canvas not found, showing URL instead', 'error');
                     return;
                 }
                 
@@ -1097,16 +1173,79 @@
                     } else {
                         console.log('QR code generated successfully');
                         document.getElementById('qrcode').style.display = 'block';
-                        document.getElementById('qrFallback').style.display = 'none';
+                        const fallback = document.getElementById('qrFallback');
+                        if (fallback) fallback.style.display = 'none';
                         showStatus(`QR code generated with real-time sync for Section ${section}, Page ${page}`, 'success');
                     }
                 });
             } else {
-                // QR library not available, show fallback
-                console.log('QR library not available, showing fallback');
-                showQRFallback();
-                showStatus('QR code library not available, showing URL instead', 'info');
+                // QR library not available, show enhanced fallback
+                console.log('QR library not available, showing enhanced fallback');
+                showEnhancedQRFallback(syncUrl, section, page);
+                showStatus('QR code library not available - showing alternatives', 'info');
             }
+        }
+        
+        function showEnhancedQRFallback(syncUrl, section, page) {
+            document.getElementById('qrcode').style.display = 'none';
+            const fallback = document.getElementById('qrFallback');
+            if (fallback) {
+                fallback.style.display = 'block';
+                
+                // Enhanced fallback with multiple QR generation options
+                const enhancedHTML = `
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border: 1px solid #ffeaa7; margin-bottom: 15px;">
+                        <p style="margin: 0 0 10px 0; color: #856404; font-weight: bold;">
+                            QR Code library not available. Use one of these alternatives:
+                        </p>
+                    </div>
+                    
+                    <div style="display: grid; gap: 15px;">
+                        <!-- Online QR Generators -->
+                        <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                            <h4 style="margin: 0 0 10px 0; color: #007bff;">📱 Online QR Generators:</h4>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <a href="https://qr-code-generator.com/" target="_blank" style="padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 14px;">QR-Code-Generator.com</a>
+                                <a href="https://www.qr-code-generator.org/" target="_blank" style="padding: 8px 12px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; font-size: 14px;">QR-Code-Generator.org</a>
+                                <a href="https://qrcode.tec-it.com/en" target="_blank" style="padding: 8px 12px; background: #17a2b8; color: white; text-decoration: none; border-radius: 4px; font-size: 14px;">TEC-IT QR Code</a>
+                            </div>
+                            <p style="margin: 10px 0 0 0; font-size: 14px; color: #666;">
+                                Copy the URL below and paste it into any of these QR generators
+                            </p>
+                        </div>
+                        
+                        <!-- URL to Copy -->
+                        <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                            <h4 style="margin: 0 0 10px 0; color: #28a745;">🔗 URL to Convert:</h4>
+                            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; border: 1px solid #dee2e6; margin-bottom: 10px;">
+                                ${syncUrl}
+                            </div>
+                            <button onclick="copyToClipboard('${syncUrl}')" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                📋 Copy URL
+                            </button>
+                        </div>
+                        
+                        <!-- Manual Sharing -->
+                        <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                            <h4 style="margin: 0 0 10px 0; color: #6f42c1;">📤 Manual Sharing:</h4>
+                            <p style="margin: 0; color: #666; font-size: 14px;">
+                                Share this URL directly with viewers via email, chat, or any messaging app.<br>
+                                Current selection: <strong>Section ${section}, Page ${page}</strong>
+                            </p>
+                        </div>
+                    </div>
+                `;
+                
+                fallback.innerHTML = enhancedHTML;
+            }
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus('URL copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy. Please copy manually.', 'error');
+            });
         }
         
         function showQRFallback() {
