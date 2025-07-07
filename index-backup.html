@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Sync for GitHub Pages</title>
+    <!-- Use QRious library - more reliable than qrcode -->
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script>
+        // Simple QR library check
+        function isQRLibraryLoaded() {
+            return typeof QRious !== 'undefined';
+        }
+        
+        console.log('QRious library loaded:', isQRLibraryLoaded());
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .sync-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        #qrcode {
+            margin: 20px auto;
+        }
+        
+        .url-display {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+            font-size: 14px;
+        }
+        
+        .pdf-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        input, select, button {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .pdf-container {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 60vh;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        kbd {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 0.9em;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Sync for GitHub Pages</h1>
+        
+        <div class="instructions">
+            <h3>How it works:</h3>
+            <ol>
+                <li><strong>Presenter:</strong> Select section (1-14) and page (1-20), generate QR code</li>
+                <li><strong>Viewers:</strong> Scan QR code once to connect and load current PDF</li>
+                <li><strong>Real-time sync:</strong> All future navigation syncs instantly across all devices</li>
+                <li><strong>All devices:</strong> Load corresponding PDF (e.g., 3_15.pdf) from their local folders</li>
+            </ol>
+            <p><strong>PDF Format:</strong> Files should be named like <code>1_1.pdf</code>, <code>3_15.pdf</code>, <code>14_20.pdf</code>, etc.</p>
+            
+            <details style="margin-top: 15px;">
+                <summary style="cursor: pointer; font-weight: bold;">🔄 Real-time Sync Process</summary>
+                <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                    <p><strong>Presenter:</strong></p>
+                    <ol>
+                        <li>Select section and page, generate QR code</li>
+                        <li>Navigate with keyboard shortcuts or buttons</li>
+                        <li>All viewers sync instantly - no new QR codes needed!</li>
+                    </ol>
+                    <p><strong>Viewers:</strong></p>
+                    <ol>
+                        <li>Scan the QR code (auto-connects to real-time sync)</li>
+                        <li>Enter local folder name</li>
+                        <li>Current PDF loads + real-time sync established</li>
+                        <li>All future PDFs load automatically as presenter navigates!</li>
+                    </ol>
+                    <p style="color: #007bff; font-weight: bold;">✨ One QR scan = Real-time sync forever!</p>
+                </div>
+            </details>
+            
+            <details style="margin-top: 15px;">
+                <summary style="cursor: pointer; font-weight: bold;">⌨️ Keyboard Shortcuts (Presenter)</summary>
+                <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><kbd>→</kbd> or <kbd>N</kbd> - Next PDF (syncs to all viewers)</li>
+                        <li><kbd>←</kbd> or <kbd>P</kbd> - Previous PDF (syncs to all viewers)</li>
+                        <li><kbd>Home</kbd> - Jump to start (1_1)</li>
+                        <li><kbd>End</kbd> - Jump to end (14_20)</li>
+                        <li><kbd>Ctrl+Enter</kbd> - Generate QR code</li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+        
+        <!-- Sync Section -->
+        <div class="sync-section">
+            <h3>Content Selection Control</h3>
+            
+            <!-- WebRTC Status Section -->
+            <div id="webrtcStatus" style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 5px; border: 2px solid #007bff;">
+                <h4>Real-time Sync Status</h4>
+                <div id="connectionInfo" style="padding: 10px; border-radius: 4px; margin: 10px 0;">
+                    <span id="connectionText">Initializing real-time sync...</span>
+                </div>
+                <div id="connectedViewers" style="margin-top: 10px; padding: 10px; background: #d4edda; border-radius: 4px; display: none;">
+                    <strong>Connected Viewers:</strong> <span id="viewerCount">0</span>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                <div>
+                    <label for="chapterSelect">Section (1-14):</label>
+                    <select id="chapterSelect" onchange="updatePdfSelection()">
+                        <option value="">-- Select Section --</option>
+                        <option value="1">Section 1</option>
+                        <option value="2">Section 2</option>
+                        <option value="3">Section 3</option>
+                        <option value="4">Section 4</option>
+                        <option value="5">Section 5</option>
+                        <option value="6">Section 6</option>
+                        <option value="7">Section 7</option>
+                        <option value="8">Section 8</option>
+                        <option value="9">Section 9</option>
+                        <option value="10">Section 10</option>
+                        <option value="11">Section 11</option>
+                        <option value="12">Section 12</option>
+                        <option value="13">Section 13</option>
+                        <option value="14">Section 14</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="verseSelect">Page (1-20):</label>
+                    <select id="verseSelect" onchange="updatePdfSelection()">
+                        <option value="">-- Select Page --</option>
+                        <option value="1">Page 1</option>
+                        <option value="2">Page 2</option>
+                        <option value="3">Page 3</option>
+                        <option value="4">Page 4</option>
+                        <option value="5">Page 5</option>
+                        <option value="6">Page 6</option>
+                        <option value="7">Page 7</option>
+                        <option value="8">Page 8</option>
+                        <option value="9">Page 9</option>
+                        <option value="10">Page 10</option>
+                        <option value="11">Page 11</option>
+                        <option value="12">Page 12</option>
+                        <option value="13">Page 13</option>
+                        <option value="14">Page 14</option>
+                        <option value="15">Page 15</option>
+                        <option value="16">Page 16</option>
+                        <option value="17">Page 17</option>
+                        <option value="18">Page 18</option>
+                        <option value="19">Page 19</option>
+                        <option value="20">Page 20</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="selectedPdf">Selected PDF:</label>
+                    <input type="text" id="selectedPdf" readonly style="background: #f8f9fa; font-weight: bold;" placeholder="Section_Page">
+                </div>
+            </div>
+            
+            <div>
+                <button id="generateBtn" onclick="generateSyncUrl()" disabled>Generate QR Code</button>
+                <button onclick="clearSync()">Clear Selection</button>
+            </div>
+            
+            <!-- Navigation Controls -->
+            <div id="navigationControls" style="display: none; margin-top: 15px; padding: 15px; background: #e9ecef; border-radius: 5px;">
+                <h4>Quick Navigation</h4>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button id="prevBtn" onclick="navigatePrevious()" disabled>← Previous</button>
+                    <button id="nextBtn" onclick="navigateNext()" disabled>Next →</button>
+                    <span style="margin: 0 15px; font-weight: bold;" id="currentPosition">Section -, Page -</span>
+                    <button onclick="jumpToStart()">Jump to Start (1_1)</button>
+                    <button onclick="jumpToEnd()">Jump to End (14_20)</button>
+                </div>
+            </div>
+            
+            <div id="qrSection" style="display: none;">
+                <h4>Scan this QR code on other devices:</h4>
+                <div class="qr-container">
+                    <canvas id="qrcode"></canvas>
+                    <div id="qrFallback" style="display: none;">
+                        <p style="color: #dc3545; font-weight: bold;">QR Code generation unavailable. Use this URL instead:</p>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; word-break: break-all; font-family: monospace; border: 2px dashed #007bff;">
+                            <span id="fallbackUrl"></span>
+                        </div>
+                        <p style="margin-top: 10px; color: #666;">
+                            <strong>Alternative:</strong> Generate QR code at 
+                            <a href="https://qr-code-generator.com/" target="_blank">qr-code-generator.com</a> 
+                            using the URL above
+                        </p>
+                    </div>
+                </div>
+                
+                <h4>Or visit this URL:</h4>
+                <div id="syncUrl" class="url-display"></div>
+                <button onclick="copySyncUrl()">Copy URL</button>
+            </div>
+        </div>
+        
+        <!-- Device Configuration -->
+        <div class="pdf-controls">
+            <h3>Device Configuration</h3>
+            <div>
+                <label for="deviceName">Device Name:</label>
+                <input type="text" id="deviceName" placeholder="My Device" value="">
+                
+                <label for="localFolder">Local PDF Folder:</label>
+                <input type="text" id="localFolder" placeholder="e.g., pdfs, documents, my-folder" value="">
+                <small style="display: block; color: #666; margin-top: 5px;">
+                    Enter the folder name where your numbered PDFs (1_1.pdf to 14_20.pdf) are stored
+                </small>
+            </div>
+            
+            <div>
+                <button onclick="loadCurrentPDF()">Load Current PDF</button>
+                <button onclick="autoRefresh()">Auto Refresh (30s)</button>
+            </div>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <!-- PDF Viewer -->
+        <div class="pdf-container">
+            <iframe id="pdfViewer" src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <script>
+        let currentPdfName = '';
+        let autoRefreshInterval = null;
+        
+        // WebRTC variables
+        let isPresenter = true; // Always presenter by default
+        let peerConnection = null;
+        let dataChannel = null;
+        let connectedPeers = new Map();
+        let connectionCode = '';
+        
+        // WebRTC configuration using free STUN servers
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.services.mozilla.com' }
+            ]
+        };
+        
+        // Core UI functions that need to be available immediately
+        function updatePdfSelection() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const generateBtn = document.getElementById('generateBtn');
+            const navigationControls = document.getElementById('navigationControls');
+            
+            if (section && page) {
+                const pdfName = `${section}_${page}`;
+                document.getElementById('selectedPdf').value = pdfName;
+                generateBtn.disabled = false;
+                currentPdfName = `${pdfName}.pdf`;
+                
+                // Show navigation controls and update position
+                if (navigationControls) {
+                    navigationControls.style.display = 'block';
+                    updateNavigationButtons();
+                    updateCurrentPosition();
+                }
+                
+                // Auto-update the PDF display to show current selection
+                setTimeout(() => {
+                    loadCurrentPDF();
+                }, 100);
+                
+            } else {
+                document.getElementById('selectedPdf').value = '';
+                generateBtn.disabled = true;
+                currentPdfName = '';
+                if (navigationControls) {
+                    navigationControls.style.display = 'none';
+                }
+                
+                // Show "no selection" fallback
+                setTimeout(() => {
+                    loadCurrentPDF();
+                }, 100);
+            }
+        }
+        
+        function updateNavigationButtons() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            if (prevBtn && nextBtn) {
+                // Disable previous if at start (1_1)
+                prevBtn.disabled = (section === 1 && page === 1);
+                
+                // Disable next if at end (14_20)
+                nextBtn.disabled = (section === 14 && page === 20);
+            }
+        }
+        
+        function updateCurrentPosition() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const positionSpan = document.getElementById('currentPosition');
+            
+            if (positionSpan) {
+                if (section && page) {
+                    positionSpan.textContent = `Section ${section}, Page ${page}`;
+                } else {
+                    positionSpan.textContent = 'Section -, Page -';
+                }
+            }
+        }
+        
+        // Add all the missing functions
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            if (statusDiv) {
+                statusDiv.textContent = message;
+                statusDiv.className = `status ${type}`;
+                statusDiv.style.display = 'block';
+                
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 5000);
+                }
+            }
+        }
+        
+        async function initializePresenter() {
+            try {
+                console.log('Starting WebRTC initialization...');
+                updateConnectionInfo('Initializing real-time sync...', 'info');
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                console.log('RTCPeerConnection created');
+                
+                // Create data channel for sending PDF updates
+                dataChannel = peerConnection.createDataChannel('pdfSync', {
+                    ordered: true
+                });
+                console.log('Data channel created');
+                
+                dataChannel.onopen = () => {
+                    console.log('Data channel opened');
+                    updateConnectionInfo('Real-time sync ready - QR codes will include connection info', 'success');
+                };
+                
+                // Handle incoming viewer connections
+                peerConnection.ondatachannel = (event) => {
+                    console.log('Incoming data channel');
+                    const channel = event.channel;
+                    channel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                };
+                
+                // Monitor connection changes
+                peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state changed:', peerConnection.connectionState);
+                    updateViewerCount();
+                    if (peerConnection.connectionState === 'connected') {
+                        updateConnectionInfo('Viewer connected via QR code - real-time sync active', 'success');
+                    } else if (peerConnection.connectionState === 'disconnected') {
+                        updateConnectionInfo('Viewer disconnected - QR codes will work normally', 'info');
+                    }
+                };
+                
+                console.log('Creating offer...');
+                // Create offer for viewers to connect
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                console.log('Offer created and set');
+                
+                // Wait for ICE gathering to complete
+                console.log('Waiting for ICE gathering...');
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            console.log('ICE gathering state:', peerConnection.iceGatheringState);
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                // Store connection code for QR code inclusion
+                connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                console.log('Connection code generated, length:', connectionCode.length);
+                updateConnectionInfo('Real-time sync initialized - QR codes will auto-connect viewers', 'success');
+                
+            } catch (error) {
+                console.error('WebRTC initialization failed:', error);
+                updateConnectionInfo('Failed to initialize real-time sync: ' + error.message, 'error');
+                
+                // Continue without WebRTC - don't let this break the app
+                connectionCode = '';
+                console.log('Continuing without WebRTC...');
+            }
+        }
+        
+        function updateConnectionInfo(message, type) {
+            const connectionInfo = document.getElementById('connectionInfo');
+            const connectionText = document.getElementById('connectionText');
+            
+            if (connectionText) {
+                connectionText.textContent = message;
+            }
+            if (connectionInfo) {
+                connectionInfo.className = type;
+            }
+        }
+        
+        // Set device name based on user agent
+        const deviceName = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 
+            'Mobile-' + Math.random().toString(36).substr(2, 3) : 
+            'Desktop-' + Math.random().toString(36).substr(2, 3);
+        document.getElementById('deviceName').value = deviceName;
+        
+        // Check URL parameters on load
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            const rtcFromUrl = urlParams.get('rtc');
+            
+            if (pdfFromUrl) {
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                
+                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
+                const pdfBase = currentPdfName.replace('.pdf', '');
+                const [section, page] = pdfBase.split('_');
+                
+                if (section && page) {
+                    document.getElementById('chapterSelect').value = section;
+                    document.getElementById('verseSelect').value = page;
+                    document.getElementById('selectedPdf').value = pdfBase;
+                }
+                
+                // Check if this is a WebRTC connection from QR code
+                if (rtcFromUrl) {
+                    // Enable WebRTC mode and connect automatically
+                    document.querySelector('input[value="webrtc"]').checked = true;
+                    connectionMode = 'webrtc';
+                    isPresenter = false; // This is a viewer connecting via QR
+                    
+                    document.getElementById('webrtcStatus').style.display = 'block';
+                    updateConnectionInfo('Connecting via QR code...', 'info');
+                    
+                    // Connect to presenter using the RTC data from QR code
+                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl));
+                    
+                    showStatus(`Connected via QR code: Section ${section}, Page ${page}`, 'success');
+                } else {
+                    showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
+                }
+                
+                // Auto-load if local folder is selected
+                setTimeout(() => {
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    } else {
+                        showStatus('Please enter your local folder name to load the PDF', 'info');
+                    }
+                }, 1000);
+            } else {
+                showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
+            }
+        });
+        
+        // Initialize WebRTC on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== DOM Content Loaded ===');
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            const rtcFromUrl = urlParams.get('rtc');
+            
+            if (pdfFromUrl) {
+                console.log('Loading as viewer with PDF:', pdfFromUrl);
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                
+                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
+                const pdfBase = currentPdfName.replace('.pdf', '');
+                const [section, page] = pdfBase.split('_');
+                
+                if (section && page) {
+                    document.getElementById('chapterSelect').value = section;
+                    document.getElementById('verseSelect').value = page;
+                    document.getElementById('selectedPdf').value = pdfBase;
+                }
+                
+                // Check if this is a WebRTC connection from QR code
+                if (rtcFromUrl) {
+                    // This is a viewer connecting via QR
+                    isPresenter = false;
+                    updateConnectionInfo('Connecting via QR code...', 'info');
+                    
+                    // Connect to presenter using the RTC data from QR code
+                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl)).then(() => {
+                        showStatus(`Connected via QR code: Section ${section}, Page ${page}`, 'success');
+                    }).catch((error) => {
+                        console.error('Failed to connect via QR code:', error);
+                        showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
+                    });
+                } else {
+                    showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
+                }
+                
+                // Always try to load/display - loadCurrentPDF handles the fallback
+                setTimeout(() => {
+                    loadCurrentPDF();
+                }, 1000);
+            } else {
+                // This is a presenter - initialize WebRTC
+                console.log('Initializing as presenter...');
+                initializePresenter().then(() => {
+                    console.log('WebRTC initialization completed');
+                }).catch((error) => {
+                    console.error('WebRTC initialization failed, continuing without it:', error);
+                });
+                
+                showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
+                
+                // Show the "no selection" fallback on presenter side
+                setTimeout(() => {
+                    loadCurrentPDF();
+                }, 500);
+            }
+        });
+        
+        function updatePdfSelection() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const generateBtn = document.getElementById('generateBtn');
+            const navigationControls = document.getElementById('navigationControls');
+            
+            if (section && page) {
+                const pdfName = `${section}_${page}`;
+                document.getElementById('selectedPdf').value = pdfName;
+                generateBtn.disabled = false;
+                currentPdfName = `${pdfName}.pdf`;
+                
+                // Show navigation controls and update position
+                navigationControls.style.display = 'block';
+                updateNavigationButtons();
+                updateCurrentPosition();
+            } else {
+                document.getElementById('selectedPdf').value = '';
+                generateBtn.disabled = true;
+                currentPdfName = '';
+                navigationControls.style.display = 'none';
+            }
+        }
+        
+        function updateNavigationButtons() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            // Disable previous if at start (1_1)
+            prevBtn.disabled = (section === 1 && page === 1);
+            
+            // Disable next if at end (14_20)
+            nextBtn.disabled = (section === 14 && page === 20);
+        }
+        
+        function updateCurrentPosition() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const positionSpan = document.getElementById('currentPosition');
+            
+            if (section && page) {
+                positionSpan.textContent = `Section ${section}, Page ${page}`;
+            } else {
+                positionSpan.textContent = 'Section -, Page -';
+            }
+        }
+            try {
+                updateConnectionInfo('Initializing real-time sync...', 'info');
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Create data channel for sending PDF updates
+                dataChannel = peerConnection.createDataChannel('pdfSync', {
+                    ordered: true
+                });
+                
+                dataChannel.onopen = () => {
+                    updateConnectionInfo('Real-time sync ready - QR codes will include connection info', 'success');
+                };
+                
+                // Handle incoming viewer connections
+                peerConnection.ondatachannel = (event) => {
+                    const channel = event.channel;
+                    channel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                };
+                
+                // Monitor connection changes
+                peerConnection.onconnectionstatechange = () => {
+                    updateViewerCount();
+                    if (peerConnection.connectionState === 'connected') {
+                        updateConnectionInfo('Viewer connected via QR code - real-time sync active', 'success');
+                    } else if (peerConnection.connectionState === 'disconnected') {
+                        updateConnectionInfo('Viewer disconnected - QR codes will work normally', 'info');
+                    }
+                };
+                
+                // Create offer for viewers to connect
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                // Wait for ICE gathering to complete
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                // Store connection code for QR code inclusion
+                connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                updateConnectionInfo('Real-time sync initialized - QR codes will auto-connect viewers', 'success');
+                
+            } catch (error) {
+                updateConnectionInfo('Failed to initialize real-time sync: ' + error.message, 'error');
+                console.error('WebRTC initialization error:', error);
+            }
+        }
+        
+        async function connectToPresenterFromQR(connectionData) {
+            try {
+                updateConnectionInfo('Connecting to presenter...', 'info');
+                
+                const offer = JSON.parse(atob(connectionData));
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Handle data channel from presenter
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    
+                    dataChannel.onopen = () => {
+                        updateConnectionInfo('Connected to presenter! PDFs will sync automatically.', 'success');
+                        
+                        // Send viewer info to presenter
+                        sendMessage({
+                            type: 'viewerConnected',
+                            deviceName: document.getElementById('deviceName').value,
+                            timestamp: new Date().toISOString()
+                        });
+                    };
+                    
+                    dataChannel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                    
+                    dataChannel.onclose = () => {
+                        updateConnectionInfo('Disconnected from presenter', 'error');
+                    };
+                };
+                
+                await peerConnection.setRemoteDescription(offer);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Wait for ICE gathering
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+            } catch (error) {
+                updateConnectionInfo('Failed to connect: ' + error.message, 'error');
+                console.error('WebRTC connection error:', error);
+            }
+        }
+        
+        function updateConnectionInfo(message, type) {
+            const connectionInfo = document.getElementById('connectionInfo');
+            const connectionText = document.getElementById('connectionText');
+            
+            connectionText.textContent = message;
+            connectionInfo.className = type;
+        }
+        
+        function handleDataChannelMessage(data) {
+            switch (data.type) {
+                case 'pdfSync':
+                    // Received PDF change from presenter
+                    currentPdfName = data.pdfName;
+                    
+                    // Update UI to show current selection
+                    document.getElementById('chapterSelect').value = data.section;
+                    document.getElementById('verseSelect').value = data.page;
+                    document.getElementById('selectedPdf').value = `${data.section}_${data.page}`;
+                    
+                    showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
+                    
+                    // Always try to load/display - loadCurrentPDF handles the fallback
+                    loadCurrentPDF();
+                    break;
+                    
+                case 'viewerConnected':
+                    if (isPresenter) {
+                        showStatus(`Viewer connected: ${data.deviceName}`, 'success');
+                        updateViewerCount();
+                    }
+                    break;
+            }
+        }
+        
+        function sendMessage(message) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(message));
+                return true;
+            }
+            return false;
+        }
+        
+        function broadcastPdfChange(section, page) {
+            if (isPresenter) {
+                const message = {
+                    type: 'pdfSync',
+                    section: parseInt(section),
+                    page: parseInt(page),
+                    pdfName: `${section}_${page}.pdf`,
+                    timestamp: new Date().toISOString()
+                };
+                
+                if (sendMessage(message)) {
+                    showStatus(`PDF synced to all connected viewers: Section ${section}, Page ${page}`, 'success');
+                } else {
+                    showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
+                }
+            }
+        }
+        
+        function updateViewerCount() {
+            if (isPresenter && peerConnection) {
+                const isConnected = peerConnection.connectionState === 'connected';
+                const viewerCount = isConnected ? 1 : 0; // Simplified for demo
+                
+                document.getElementById('viewerCount').textContent = viewerCount;
+                document.getElementById('connectedViewers').style.display = viewerCount > 0 ? 'block' : 'none';
+            }
+        }
+        
+        function cleanupWebRTC() {
+            if (dataChannel) {
+                dataChannel.close();
+                dataChannel = null;
+            }
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            connectedPeers.clear();
+            connectionCode = '';
+        }
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const generateBtn = document.getElementById('generateBtn');
+            const navigationControls = document.getElementById('navigationControls');
+            
+            if (section && page) {
+                const pdfName = `${section}_${page}`;
+                document.getElementById('selectedPdf').value = pdfName;
+                generateBtn.disabled = false;
+                currentPdfName = `${pdfName}.pdf`;
+                
+                // Show navigation controls and update position
+                navigationControls.style.display = 'block';
+                updateNavigationButtons();
+                updateCurrentPosition();
+            } else {
+                document.getElementById('selectedPdf').value = '';
+                generateBtn.disabled = true;
+                currentPdfName = '';
+                navigationControls.style.display = 'none';
+            }
+        }
+        
+        function updateNavigationButtons() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            // Disable previous if at start (1_1)
+            prevBtn.disabled = (section === 1 && page === 1);
+            
+            // Disable next if at end (14_20)
+            nextBtn.disabled = (section === 14 && page === 20);
+        }
+        
+        function updateCurrentPosition() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const positionSpan = document.getElementById('currentPosition');
+            
+            if (section && page) {
+                positionSpan.textContent = `Section ${section}, Page ${page}`;
+            } else {
+                positionSpan.textContent = 'Section -, Page -';
+            }
+        }
+        
+        function navigateNext() {
+            let section = parseInt(document.getElementById('chapterSelect').value);
+            let page = parseInt(document.getElementById('verseSelect').value);
+            
+            if (!section || !page) return;
+            
+            // Navigate to next PDF
+            if (page < 20) {
+                page++;
+            } else if (section < 14) {
+                section++;
+                page = 1;
+            } else {
+                // Already at the end
+                return;
+            }
+            
+            // Update dropdowns
+            document.getElementById('chapterSelect').value = section.toString();
+            document.getElementById('verseSelect').value = page.toString();
+            
+            // Update PDF selection
+            updatePdfSelection();
+            
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(section, page);
+            
+            showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
+        }
+        
+        function navigatePrevious() {
+            let section = parseInt(document.getElementById('chapterSelect').value);
+            let page = parseInt(document.getElementById('verseSelect').value);
+            
+            if (!section || !page) return;
+            
+            // Navigate to previous PDF
+            if (page > 1) {
+                page--;
+            } else if (section > 1) {
+                section--;
+                page = 20;
+            } else {
+                // Already at the start
+                return;
+            }
+            
+            // Update dropdowns
+            document.getElementById('chapterSelect').value = section.toString();
+            document.getElementById('verseSelect').value = page.toString();
+            
+            // Update PDF selection
+            updatePdfSelection();
+            
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(section, page);
+            
+            showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
+        }
+        
+        function jumpToStart() {
+            document.getElementById('chapterSelect').value = '1';
+            document.getElementById('verseSelect').value = '1';
+            updatePdfSelection();
+            
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(1, 1);
+            
+            showStatus('Jumped to start: Section 1, Page 1', 'info');
+        }
+        
+        function jumpToEnd() {
+            document.getElementById('chapterSelect').value = '14';
+            document.getElementById('verseSelect').value = '20';
+            updatePdfSelection();
+            
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(14, 20);
+            
+            showStatus('Jumped to end: Section 14, Page 20', 'info');
+        }
+        
+        function generateSyncUrl() {
+            console.log('=== generateSyncUrl called ===');
+            alert('Generate QR Code button clicked!'); // Temporary debug alert
+            
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            
+            console.log('Section:', section, 'Page:', page);
+            
+            if (!section || !page) {
+                showStatus('Please select both section and page', 'error');
+                return;
+            }
+            
+            const pdfName = `${section}_${page}.pdf`;
+            currentPdfName = pdfName;
+            
+            // Create sync URL
+            const baseUrl = window.location.origin + window.location.pathname;
+            let syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            
+            // Add WebRTC connection data
+            if (connectionCode) {
+                syncUrl += `&rtc=${encodeURIComponent(connectionCode)}`;
+            }
+            
+            console.log('Generated URL:', syncUrl);
+            
+            // Display URL
+            const syncUrlElement = document.getElementById('syncUrl');
+            if (syncUrlElement) {
+                syncUrlElement.textContent = syncUrl;
+            }
+            
+            // Show QR section
+            const qrSection = document.getElementById('qrSection');
+            if (qrSection) {
+                qrSection.style.display = 'block';
+            }
+            
+            // Generate QR code using QRious
+            console.log('QRious available:', typeof QRious !== 'undefined');
+            
+            if (typeof QRious !== 'undefined') {
+                const canvas = document.getElementById('qrcode');
+                
+                if (!canvas) {
+                    console.error('Canvas not found');
+                    showStatus('QR canvas not found', 'error');
+                    return;
+                }
+                
+                try {
+                    console.log('Generating QR code...');
+                    showStatus('Generating QR code...', 'info');
+                    
+                    // Clear canvas first
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Generate QR code
+                    const qr = new QRious({
+                        element: canvas,
+                        value: syncUrl,
+                        size: 256,
+                        background: '#ffffff',
+                        foreground: '#000000'
+                    });
+                    
+                    console.log('QR code generated successfully');
+                    canvas.style.display = 'block';
+                    
+                    const fallback = document.getElementById('qrFallback');
+                    if (fallback) fallback.style.display = 'none';
+                    
+                    showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
+                    
+                } catch (error) {
+                    console.error('QR generation error:', error);
+                    showQRFallback();
+                    showStatus('QR generation failed: ' + error.message, 'error');
+                }
+            } else {
+                console.log('QRious not available, showing fallback');
+                showQRFallback();
+                showStatus('QR library not available - use URL below', 'info');
+            }
+        }
+        
+        function showQRFallback() {
+            const canvas = document.getElementById('qrcode');
+            const fallback = document.getElementById('qrFallback');
+            
+            if (canvas) canvas.style.display = 'none';
+            if (fallback) fallback.style.display = 'block';
+        }
+        
+        function clearSync() {
+            document.getElementById('qrSection').style.display = 'none';
+            document.getElementById('chapterSelect').value = '';
+            document.getElementById('verseSelect').value = '';
+            document.getElementById('selectedPdf').value = '';
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('navigationControls').style.display = 'none';
+            currentPdfName = '';
+            showStatus('Selection cleared', 'info');
+        }
+        
+        function copySyncUrl() {
+            const url = document.getElementById('syncUrl').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                showStatus('Sync URL copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy URL. Please copy manually.', 'error');
+            });
+        }
+        
+        function loadCurrentPDF() {
+            const localFolder = document.getElementById('localFolder').value;
+            const pdfName = currentPdfName;
+            
+            if (!pdfName) {
+                // Fallback: Show "no selection" message for presenter
+                const pdfViewer = document.getElementById('pdfViewer');
+                const noSelectionHTML = `
+                    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: #f8f9fa; border: 2px dashed #6c757d; text-align: center; padding: 20px;">
+                        <h2 style="color: #6c757d; margin-bottom: 20px;">📄 PDF Sync Ready</h2>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                            <h3 style="margin: 0 0 10px 0; color: #333;">No PDF Selected</h3>
+                            <div style="font-size: 16px; color: #666;">Select section and page above to begin</div>
+                        </div>
+                        <div style="background: #e2e3e5; padding: 15px; border-radius: 5px; border: 1px solid #d6d8db; max-width: 400px;">
+                            <p style="margin: 0; color: #495057;">
+                                <strong>Ready to sync:</strong><br>
+                                Choose section (1-14) and page (1-20)<br>
+                                Generate QR code for viewers
+                            </p>
+                        </div>
+                    </div>
+                `;
+                pdfViewer.srcdoc = noSelectionHTML;
+                showStatus('Select section and page to begin PDF sync', 'info');
+                return;
+            }
+            
+            // Extract section and page for display
+            const pdfBase = pdfName.replace('.pdf', '');
+            const [section, page] = pdfBase.split('_');
+            
+            if (!localFolder) {
+                // Fallback: Show PDF info without trying to load
+                const pdfViewer = document.getElementById('pdfViewer');
+                const fallbackHTML = `
+                    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: #f8f9fa; border: 2px dashed #007bff; text-align: center; padding: 20px;">
+                        <h2 style="color: #007bff; margin-bottom: 20px;">📄 PDF Sync Active</h2>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                            <h3 style="margin: 0 0 10px 0; color: #333;">Current Selection:</h3>
+                            <div style="font-size: 24px; font-weight: bold; color: #007bff;">Section ${section}, Page ${page}</div>
+                            <div style="font-size: 18px; color: #666; margin-top: 10px;">PDF: ${pdfName}</div>
+                        </div>
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border: 1px solid #ffeaa7; max-width: 400px;">
+                            <p style="margin: 0; color: #856404;">
+                                <strong>To load PDFs:</strong><br>
+                                Enter your local folder name above<br>
+                                (e.g., "pdfs", "documents", "my-folder")
+                            </p>
+                        </div>
+                    </div>
+                `;
+                pdfViewer.srcdoc = fallbackHTML;
+                showStatus(`Synced to Section ${section}, Page ${page} - Enter folder name to load PDF`, 'info');
+                return;
+            }
+            
+            const pdfPath = `${localFolder}/${pdfName}`;
+            const pdfViewer = document.getElementById('pdfViewer');
+            
+            showStatus(`Loading Section ${section}, Page ${page} from ${localFolder}...`, 'info');
+            
+            // Clear any fallback content
+            pdfViewer.srcdoc = '';
+            
+            pdfViewer.onload = function() {
+                showStatus(`Successfully loaded: Section ${section}, Page ${page}`, 'success');
+            };
+            
+            pdfViewer.onerror = function() {
+                showStatus(`Error loading: ${pdfPath}`, 'error');
+                
+                // Show error fallback
+                const errorHTML = `
+                    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: #f8f9fa; border: 2px dashed #dc3545; text-align: center; padding: 20px;">
+                        <h2 style="color: #dc3545; margin-bottom: 20px;">❌ PDF Not Found</h2>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                            <h3 style="margin: 0 0 10px 0; color: #333;">Looking for:</h3>
+                            <div style="font-size: 18px; color: #dc3545; font-family: monospace;">${pdfPath}</div>
+                        </div>
+                        <div style="background: #f8d7da; padding: 15px; border-radius: 5px; border: 1px solid #f5c6cb; max-width: 400px;">
+                            <p style="margin: 0; color: #721c24;">
+                                <strong>Check:</strong><br>
+                                • Folder name is correct<br>
+                                • PDF file exists: ${pdfName}<br>
+                                • File path: ${pdfPath}
+                            </p>
+                        </div>
+                    </div>
+                `;
+                pdfViewer.srcdoc = errorHTML;
+            };
+            
+            pdfViewer.src = pdfPath;
+        }
+        
+        function autoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                showStatus('Auto refresh disabled', 'info');
+                return;
+            }
+            
+            autoRefreshInterval = setInterval(() => {
+                // Check for URL parameter changes (in case URL was updated)
+                const urlParams = new URLSearchParams(window.location.search);
+                const pdfFromUrl = urlParams.get('pdf');
+                
+                if (pdfFromUrl && pdfFromUrl !== currentPdfName) {
+                    currentPdfName = decodeURIComponent(pdfFromUrl);
+                    document.getElementById('pdfFileName').value = currentPdfName;
+                    showStatus(`Auto-refreshed PDF: ${currentPdfName}`, 'info');
+                    
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    }
+                }
+            }, 30000); // Check every 30 seconds
+            
+            showStatus('Auto refresh enabled (30s intervals)', 'success');
+        }
+        
+        // Auto-load PDF when local folder is selected
+        document.getElementById('localFolder').addEventListener('input', function() {
+            if (this.value && currentPdfName) {
+                loadCurrentPDF();
+            }
+        });
+        
+        // Keyboard shortcuts for navigation
+        document.addEventListener('keydown', function(event) {
+            // Only handle shortcuts if not typing in an input field
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            
+            // Only enable shortcuts if a PDF is selected
+            if (!section || !page) return;
+            
+            switch(event.key) {
+                case 'ArrowRight':
+                case 'n':
+                case 'N':
+                    event.preventDefault();
+                    navigateNext();
+                    break;
+                case 'ArrowLeft':
+                case 'p':
+                case 'P':
+                    event.preventDefault();
+                    navigatePrevious();
+                    break;
+                case 'Home':
+                    event.preventDefault();
+                    jumpToStart();
+                    break;
+                case 'End':
+                    event.preventDefault();
+                    jumpToEnd();
+                    break;
+                case ' ':
+                case 'Enter':
+                    if (event.ctrlKey || event.metaKey) {
+                        event.preventDefault();
+                        generateSyncUrl();
+                    }
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>
