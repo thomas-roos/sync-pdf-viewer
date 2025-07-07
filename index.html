@@ -14,11 +14,17 @@
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
         .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
         #qrcode { border: 1px solid #ddd; margin: 10px 0; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         #qrSection { display: none; margin-top: 20px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
         .url-display { background: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; margin: 10px 0; }
         #navigationControls { display: none; margin-top: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa; }
+        #connectionStatus { padding: 10px; margin: 10px 0; border-radius: 4px; background: #f8f9fa; border: 1px solid #ddd; }
+        .connected { color: #155724; font-weight: bold; }
+        .disconnected { color: #721c24; font-weight: bold; }
+        .connecting { color: #856404; font-weight: bold; }
+        #connectionLog { height: 100px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-top: 10px; font-family: monospace; font-size: 12px; background: #f8f9fa; }
     </style>
 </head>
 <body>
@@ -79,6 +85,13 @@
         </div>
         
         <button id="generateBtn">Generate QR Code</button>
+        
+        <!-- WebRTC Connection Status -->
+        <div id="connectionStatus">
+            <strong>WebRTC Status:</strong> <span id="connectionState" class="disconnected">Disconnected</span>
+            <button id="reconnectBtn" style="display: none;">Reconnect</button>
+            <div id="connectionLog"></div>
+        </div>
         
         <!-- Navigation Controls for Presenter -->
         <div id="navigationControls">
@@ -160,6 +173,9 @@
         const nextBtn = document.getElementById('nextBtn');
         const startBtn = document.getElementById('startBtn');
         const endBtn = document.getElementById('endBtn');
+        const connectionState = document.getElementById('connectionState');
+        const connectionLog = document.getElementById('connectionLog');
+        const reconnectBtn = document.getElementById('reconnectBtn');
         
         // Hide QR section initially
         qrSection.style.display = 'none';
@@ -174,8 +190,34 @@
         nextBtn.addEventListener('click', nextPdf);
         startBtn.addEventListener('click', jumpToStart);
         endBtn.addEventListener('click', jumpToEnd);
+        reconnectBtn.addEventListener('click', reconnectWebRTC);
         
         // Functions
+        function reconnectWebRTC() {
+            if (!isPresenter) return;
+            
+            updateConnectionStatus('Reconnecting', 'Attempting to reconnect WebRTC');
+            
+            // Close existing connection if any
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            if (dataChannel) {
+                dataChannel.close();
+                dataChannel = null;
+            }
+            
+            // Reinitialize
+            initializePresenter().then(() => {
+                updateConnectionStatus('Ready', 'WebRTC reinitialized');
+                showStatus('WebRTC connection reinitialized', 'success');
+            }).catch(error => {
+                updateConnectionStatus('Error', `Reconnection failed: ${error.message || 'Unknown error'}`);
+                showStatus('Failed to reconnect: ' + error.message, 'error');
+            });
+        }
         function updateSelection() {
             console.log('=== updateSelection called ===');
             const section = chapterSelect.value;
@@ -318,7 +360,7 @@
         async function initializePresenter() {
             try {
                 console.log('Starting WebRTC initialization...');
-                showStatus('Initializing real-time sync...', 'info');
+                updateConnectionStatus('Initializing', 'Setting up WebRTC connection');
                 
                 peerConnection = new RTCPeerConnection(rtcConfig);
                 console.log('RTCPeerConnection created');
@@ -331,12 +373,24 @@
                 
                 dataChannel.onopen = () => {
                     console.log('Data channel opened');
+                    updateConnectionStatus('Connected', 'Data channel opened');
                     showStatus('Real-time sync ready - QR codes will include connection info', 'success');
+                };
+                
+                dataChannel.onclose = () => {
+                    console.log('Data channel closed');
+                    updateConnectionStatus('Disconnected', 'Data channel closed');
+                };
+                
+                dataChannel.onerror = (error) => {
+                    console.error('Data channel error:', error);
+                    updateConnectionStatus('Error', `Data channel error: ${error.message || 'Unknown error'}`);
                 };
                 
                 // Handle incoming viewer connections
                 peerConnection.ondatachannel = (event) => {
                     console.log('Incoming data channel');
+                    updateConnectionStatus('Connected', 'Viewer connected with data channel');
                     const channel = event.channel;
                     channel.onmessage = (event) => {
                         handleDataChannelMessage(JSON.parse(event.data));
@@ -346,6 +400,11 @@
                 // Monitor connection changes
                 peerConnection.onconnectionstatechange = () => {
                     console.log('Connection state changed:', peerConnection.connectionState);
+                    updateConnectionStatus(
+                        peerConnection.connectionState.charAt(0).toUpperCase() + peerConnection.connectionState.slice(1),
+                        `Connection state: ${peerConnection.connectionState}`
+                    );
+                    
                     if (peerConnection.connectionState === 'connected') {
                         showStatus('Viewer connected via QR code - real-time sync active', 'success');
                     } else if (peerConnection.connectionState === 'disconnected') {
@@ -353,7 +412,16 @@
                     }
                 };
                 
+                peerConnection.onicegatheringstatechange = () => {
+                    updateConnectionStatus('Connecting', `ICE gathering state: ${peerConnection.iceGatheringState}`);
+                };
+                
+                peerConnection.oniceconnectionstatechange = () => {
+                    updateConnectionStatus('Connecting', `ICE connection state: ${peerConnection.iceConnectionState}`);
+                };
+                
                 console.log('Creating offer...');
+                updateConnectionStatus('Connecting', 'Creating connection offer');
                 // Create offer for viewers to connect
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
@@ -361,6 +429,7 @@
                 
                 // Wait for ICE gathering to complete
                 console.log('Waiting for ICE gathering...');
+                updateConnectionStatus('Connecting', 'Gathering connection candidates');
                 await new Promise((resolve) => {
                     if (peerConnection.iceGatheringState === 'complete') {
                         resolve();
@@ -376,6 +445,7 @@
                 
                 // Store connection code for QR code inclusion
                 const connectionData = JSON.stringify(peerConnection.localDescription);
+                updateConnectionStatus('Ready', 'Connection data prepared for QR code');
                 
                 // Compress the connection data to make QR code smaller
                 if (typeof pako !== 'undefined') {
@@ -391,13 +461,16 @@
                             .replace(/=+$/, '');
                         connectionCode = base64;
                         console.log('Connection data compressed: Original size:', connectionData.length, 'Compressed size:', connectionCode.length);
+                        updateConnectionStatus('Ready', `Connection data compressed: ${Math.round((1 - connectionCode.length / connectionData.length) * 100)}% reduction`);
                     } catch (error) {
                         console.error('Compression failed, using uncompressed data:', error);
                         connectionCode = btoa(connectionData);
+                        updateConnectionStatus('Warning', 'Using uncompressed connection data');
                     }
                 } else {
                     console.warn('Pako compression library not available, using uncompressed data');
                     connectionCode = btoa(connectionData);
+                    updateConnectionStatus('Warning', 'Compression library not available');
                 }
                 
                 console.log('Connection code generated, length:', connectionCode.length);
@@ -405,6 +478,7 @@
                 
             } catch (error) {
                 console.error('WebRTC initialization failed:', error);
+                updateConnectionStatus('Error', `WebRTC initialization failed: ${error.message || 'Unknown error'}`);
                 showStatus('Failed to initialize real-time sync: ' + error.message, 'error');
                 
                 // Continue without WebRTC - don't let this break the app
@@ -416,6 +490,7 @@
         async function connectToPresenterFromQR(connectionData) {
             try {
                 console.log('Connecting to presenter via QR...');
+                updateConnectionStatus('Connecting', 'Establishing connection to presenter');
                 showStatus('Connecting to presenter...', 'info');
                 
                 let offerData;
@@ -445,22 +520,43 @@
                         const decompressedStr = new TextDecoder().decode(decompressed);
                         offerData = JSON.parse(decompressedStr);
                         console.log('Connection data decompressed successfully');
+                        updateConnectionStatus('Connecting', 'Connection data decompressed successfully');
                     } catch (error) {
                         console.error('Decompression failed, trying uncompressed data:', error);
+                        updateConnectionStatus('Warning', 'Decompression failed, trying uncompressed data');
                         offerData = JSON.parse(atob(connectionData));
                     }
                 } else {
                     console.warn('Pako compression library not available, using uncompressed data');
+                    updateConnectionStatus('Warning', 'Compression library not available');
                     offerData = JSON.parse(atob(connectionData));
                 }
                 
                 peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Monitor connection changes
+                peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state changed:', peerConnection.connectionState);
+                    updateConnectionStatus(
+                        peerConnection.connectionState.charAt(0).toUpperCase() + peerConnection.connectionState.slice(1),
+                        `Connection state: ${peerConnection.connectionState}`
+                    );
+                };
+                
+                peerConnection.onicegatheringstatechange = () => {
+                    updateConnectionStatus('Connecting', `ICE gathering state: ${peerConnection.iceGatheringState}`);
+                };
+                
+                peerConnection.oniceconnectionstatechange = () => {
+                    updateConnectionStatus('Connecting', `ICE connection state: ${peerConnection.iceConnectionState}`);
+                };
                 
                 // Handle data channel from presenter
                 peerConnection.ondatachannel = (event) => {
                     dataChannel = event.channel;
                     
                     dataChannel.onopen = () => {
+                        updateConnectionStatus('Connected', 'Data channel opened');
                         showStatus('Connected to presenter! PDFs will sync automatically.', 'success');
                         
                         // Send viewer info to presenter
@@ -476,15 +572,25 @@
                     };
                     
                     dataChannel.onclose = () => {
+                        updateConnectionStatus('Disconnected', 'Data channel closed');
                         showStatus('Disconnected from presenter', 'error');
+                    };
+                    
+                    dataChannel.onerror = (error) => {
+                        updateConnectionStatus('Error', `Data channel error: ${error.message || 'Unknown error'}`);
+                        console.error('Data channel error:', error);
                     };
                 };
                 
+                updateConnectionStatus('Connecting', 'Setting remote description');
                 await peerConnection.setRemoteDescription(offerData);
+                
+                updateConnectionStatus('Connecting', 'Creating answer');
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 
                 // Wait for ICE gathering
+                updateConnectionStatus('Connecting', 'Gathering ICE candidates');
                 await new Promise((resolve) => {
                     if (peerConnection.iceGatheringState === 'complete') {
                         resolve();
@@ -497,7 +603,10 @@
                     }
                 });
                 
+                updateConnectionStatus('Connected', 'Connection established');
+                
             } catch (error) {
+                updateConnectionStatus('Error', `Connection failed: ${error.message || 'Unknown error'}`);
                 showStatus('Failed to connect: ' + error.message, 'error');
                 console.error('WebRTC connection error:', error);
             }
@@ -505,10 +614,12 @@
         
         function handleDataChannelMessage(data) {
             console.log('=== Received WebRTC message ===', data);
+            updateConnectionStatus('Active', `Received message: ${data.type}`);
             
             switch (data.type) {
                 case 'pdfChange':
                     console.log('Received pdfChange message:', data);
+                    updateConnectionStatus('Active', `PDF change: Section ${data.section}, Page ${data.page}`);
                     
                     // Update dropdowns to match presenter
                     chapterSelect.value = data.section.toString();
@@ -522,6 +633,7 @@
                         // Create PDF path
                         const pdfPath = `${folderPath}/${currentPdfName}`;
                         console.log('Loading PDF:', pdfPath);
+                        updateConnectionStatus('Active', `Loading PDF: ${pdfPath}`);
                         
                         // Update iframe with PDF
                         pdfViewer.src = pdfPath;
@@ -529,10 +641,17 @@
                         
                         // Force reload the iframe
                         setTimeout(() => {
-                            pdfViewer.contentWindow.location.reload();
+                            try {
+                                pdfViewer.contentWindow.location.reload();
+                                updateConnectionStatus('Active', 'PDF viewer reloaded');
+                            } catch (error) {
+                                console.error('Error reloading PDF viewer:', error);
+                                updateConnectionStatus('Warning', `Error reloading PDF: ${error.message || 'Unknown error'}`);
+                            }
                         }, 100);
                     } else {
                         console.warn('Local folder not set, cannot load PDF');
+                        updateConnectionStatus('Warning', 'Local folder not set, cannot load PDF');
                     }
                     
                     showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
@@ -540,9 +659,11 @@
                     
                 case 'viewerConnected':
                     if (isPresenter) {
+                        updateConnectionStatus('Connected', `Viewer connected: ${data.deviceName}`);
                         showStatus(`Viewer connected: ${data.deviceName}`, 'success');
                     }
                     break;
+            }
             }
         }
         
@@ -550,20 +671,24 @@
             if (dataChannel && dataChannel.readyState === 'open') {
                 try {
                     console.log('Sending message via sendMessage:', message);
+                    updateConnectionStatus('Active', `Sending message: ${message.type}`);
                     dataChannel.send(JSON.stringify(message));
                     return true;
                 } catch (error) {
                     console.error('Error sending message:', error);
+                    updateConnectionStatus('Error', `Failed to send message: ${error.message || 'Unknown error'}`);
                     return false;
                 }
             } else {
                 console.warn('Data channel not ready, message not sent:', message);
+                updateConnectionStatus('Warning', `Data channel not ready (state: ${dataChannel ? dataChannel.readyState : 'null'})`);
                 return false;
             }
         }
         
         function broadcastPdfChange(section, page) {
             console.log('=== Broadcasting PDF change ===', section, page);
+            updateConnectionStatus('Active', `Broadcasting change: Section ${section}, Page ${page}`);
             
             const message = {
                 type: 'pdfChange',
@@ -686,6 +811,32 @@
                     statusDiv.style.display = 'none';
                 }, 3000);
             }
+        }
+        
+        function updateConnectionStatus(state, message) {
+            if (!connectionState || !connectionLog) return;
+            
+            // Update connection state display
+            connectionState.textContent = state;
+            connectionState.className = state.toLowerCase();
+            
+            // Add log entry
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${timestamp}] ${state}: ${message}`;
+            connectionLog.appendChild(logEntry);
+            
+            // Auto-scroll to bottom
+            connectionLog.scrollTop = connectionLog.scrollHeight;
+            
+            // Show/hide reconnect button
+            if (state === 'Disconnected' && isPresenter) {
+                reconnectBtn.style.display = 'inline-block';
+            } else {
+                reconnectBtn.style.display = 'none';
+            }
+            
+            console.log(`WebRTC Status: ${state} - ${message}`);
         }
         
         // Initialize
