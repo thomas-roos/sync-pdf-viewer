@@ -78,6 +78,7 @@
         </div>
         
         <button id="generateBtn" onclick="generateSyncUrl()" disabled>Generate QR Code</button>
+        <button onclick="debugEnableButton()">Debug: Enable Button</button>
         
         <!-- Navigation Controls for Presenter -->
         <div id="navigationControls" style="display: none; margin-top: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa;">
@@ -155,17 +156,19 @@
         }
         
         function updatePdfSelection() {
-            console.log('updatePdfSelection called');
+            console.log('=== updatePdfSelection called ===');
             const section = document.getElementById('chapterSelect').value;
             const page = document.getElementById('verseSelect').value;
             const generateBtn = document.getElementById('generateBtn');
             const navigationControls = document.getElementById('navigationControls');
             
             console.log('Section:', section, 'Page:', page);
+            console.log('Generate button element:', generateBtn);
             
             if (section && page) {
                 const pdfName = `${section}_${page}`;
                 document.getElementById('selectedPdf').value = pdfName;
+                console.log('Setting button disabled to false');
                 generateBtn.disabled = false;
                 currentPdfName = `${pdfName}.pdf`;
                 
@@ -668,6 +671,18 @@
                 }
             } else {
                 showStatus('Please enter a local folder path', 'error');
+            }
+        }
+        
+        function debugEnableButton() {
+            console.log('Debug: Manually enabling Generate QR Code button');
+            const generateBtn = document.getElementById('generateBtn');
+            if (generateBtn) {
+                generateBtn.disabled = false;
+                showStatus('Generate QR Code button manually enabled', 'success');
+            } else {
+                console.error('Generate button not found');
+                showStatus('Error: Generate button not found', 'error');
             }
         }
         

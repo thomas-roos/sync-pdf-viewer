@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Button Enable Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        select, button { padding: 10px; margin: 5px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status { padding: 10px; margin: 10px 0; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>Button Enable Test</h1>
+    
+    <div>
+        <label for="section">Section:</label>
+        <select id="section" onchange="updateSelection()">
+            <option value="">-- Select Section --</option>
+            <option value="1">Section 1</option>
+            <option value="2">Section 2</option>
+            <option value="3">Section 3</option>
+        </select>
+    </div>
+    
+    <div>
+        <label for="page">Page:</label>
+        <select id="page" onchange="updateSelection()">
+            <option value="">-- Select Page --</option>
+            <option value="1">Page 1</option>
+            <option value="2">Page 2</option>
+            <option value="3">Page 3</option>
+        </select>
+    </div>
+    
+    <div>
+        <label for="selected">Selected:</label>
+        <input type="text" id="selected" readonly>
+    </div>
+    
+    <button id="generateBtn" onclick="generateQR()" disabled>Generate QR Code</button>
+    
+    <div id="status" class="status"></div>
+    
+    <script>
+        function updateSelection() {
+            console.log('updateSelection called');
+            const section = document.getElementById('section').value;
+            const page = document.getElementById('page').value;
+            const generateBtn = document.getElementById('generateBtn');
+            const status = document.getElementById('status');
+            
+            console.log('Section:', section, 'Page:', page);
+            status.textContent = `Selection changed: Section=${section}, Page=${page}`;
+            
+            if (section && page) {
+                document.getElementById('selected').value = `${section}_${page}`;
+                generateBtn.disabled = false;
+                console.log('Button enabled');
+                status.textContent += ' - Button enabled';
+            } else {
+                document.getElementById('selected').value = '';
+                generateBtn.disabled = true;
+                console.log('Button disabled');
+                status.textContent += ' - Button disabled';
+            }
+        }
+        
+        function generateQR() {
+            const section = document.getElementById('section').value;
+            const page = document.getElementById('page').value;
+            const status = document.getElementById('status');
+            
+            status.textContent = `QR Code would be generated for Section ${section}, Page ${page}`;
+            alert(`Generate QR Code clicked for Section ${section}, Page ${page}`);
+        }
+    </script>
+</body>
+</html>
