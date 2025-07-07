@@ -84,7 +84,8 @@
             <input type="text" id="selectedPdf" readonly style="background: #f8f9fa; font-weight: bold;" placeholder="Section_Page">
         </div>
         
-        <button id="generateBtn">Generate QR Code</button>
+        <button id="generateBtn" onclick="generateQR()">Generate QR Code</button>
+        <button onclick="testButton()">Test Button</button>
         
         <!-- WebRTC Connection Status -->
         <div id="connectionStatus">
@@ -703,13 +704,17 @@
         }
         
         function generateQR() {
-            console.log('generateQR called');
+            console.log('=== generateQR called ===');
+            alert('Generate QR Code button clicked!'); // Debug alert
             
             const section = chapterSelect.value;
             const page = verseSelect.value;
             
+            console.log('Section:', section, 'Page:', page);
+            
             if (!section || !page) {
-                showStatus('Please select both section and page', 'error');
+                showStatus('Please select both section and page before generating QR code', 'error');
+                alert('Please select both section and page'); // Debug alert
                 return;
             }
             
@@ -730,14 +735,24 @@
             console.log('URL length:', syncUrl.length);
             
             // Display URL
-            syncUrlDiv.textContent = syncUrl;
+            if (syncUrlDiv) {
+                syncUrlDiv.textContent = syncUrl;
+            }
             
             // Show QR section
-            qrSection.style.display = 'block';
+            if (qrSection) {
+                qrSection.style.display = 'block';
+            }
             
             // Generate QR code
             if (typeof QRious !== 'undefined') {
                 const canvas = document.getElementById('qrcode');
+                
+                if (!canvas) {
+                    console.error('QR canvas not found');
+                    alert('QR canvas not found'); // Debug alert
+                    return;
+                }
                 
                 try {
                     console.log('Generating QR code...');
@@ -762,11 +777,19 @@
                 } catch (error) {
                     console.error('QR generation error:', error);
                     showStatus('QR generation failed: ' + error.message, 'error');
+                    alert('QR generation failed: ' + error.message); // Debug alert
                 }
             } else {
                 console.log('QRious not available');
                 showStatus('QR library not available', 'error');
+                alert('QRious library not available'); // Debug alert
             }
+        }
+        
+        function testButton() {
+            alert('Test button works!');
+            console.log('Test button clicked');
+            showStatus('Test button clicked', 'info');
         }
         
         function copyUrl() {
