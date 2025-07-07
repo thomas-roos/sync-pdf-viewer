@@ -351,10 +351,14 @@
                     try {
                         // Convert to UTF-8 array
                         const uint8Array = new TextEncoder().encode(connectionData);
-                        // Compress
-                        const compressed = pako.deflate(uint8Array);
-                        // Convert to base64
-                        connectionCode = btoa(String.fromCharCode.apply(null, compressed));
+                        // Compress with maximum compression level (9)
+                        const compressed = pako.deflate(uint8Array, { level: 9 });
+                        // Convert to base64url (more compact than regular base64)
+                        const base64 = btoa(String.fromCharCode.apply(null, compressed))
+                            .replace(/\+/g, '-')
+                            .replace(/\//g, '_')
+                            .replace(/=+$/, '');
+                        connectionCode = base64;
                         console.log('Connection data compressed: Original size:', connectionData.length, 'Compressed size:', connectionCode.length);
                     } catch (error) {
                         console.error('Compression failed, using uncompressed data:', error);
@@ -388,8 +392,17 @@
                 // Try to decompress the connection data
                 if (typeof pako !== 'undefined') {
                     try {
+                        // Convert base64url to base64
+                        let base64 = connectionData
+                            .replace(/-/g, '+')
+                            .replace(/_/g, '/');
+                        // Add padding if needed
+                        while (base64.length % 4) {
+                            base64 += '=';
+                        }
+                        
                         // Convert base64 to binary string
-                        const binaryString = atob(connectionData);
+                        const binaryString = atob(base64);
                         // Convert to Uint8Array
                         const uint8Array = new Uint8Array(binaryString.length);
                         for (let i = 0; i < binaryString.length; i++) {
@@ -530,11 +543,13 @@
             
             // Add WebRTC connection data if available
             if (connectionCode) {
-                syncUrl += `&rtc=${encodeURIComponent(connectionCode)}`;
+                // Use a shorter parameter name to reduce QR code size
+                syncUrl += `&r=${encodeURIComponent(connectionCode)}`;
                 console.log('Added WebRTC connection code to QR');
             }
             
             console.log('Generated URL:', syncUrl);
+            console.log('URL length:', syncUrl.length);
             
             // Display URL
             const syncUrlElement = document.getElementById('syncUrl');
@@ -570,7 +585,8 @@
                     const qr = new QRious({
                         element: canvas,
                         value: syncUrl,
-                        size: 256,
+                        size: 300,
+                        level: 'L', // Lower error correction = smaller QR code
                         background: '#ffffff',
                         foreground: '#000000'
                     });
@@ -609,7 +625,7 @@
             
             const urlParams = new URLSearchParams(window.location.search);
             const pdfFromUrl = urlParams.get('pdf');
-            const rtcFromUrl = urlParams.get('rtc');
+            const rtcFromUrl = urlParams.get('r') || urlParams.get('rtc'); // Support both short and long parameter names
             
             if (pdfFromUrl) {
                 console.log('Loading as viewer with PDF:', pdfFromUrl);
