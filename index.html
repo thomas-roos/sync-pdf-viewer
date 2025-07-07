@@ -590,7 +590,7 @@
         });
         
         // Initialize WebRTC on page load
-        document.addEventListener('DOMContentLoaded', async function() {
+        document.addEventListener('DOMContentLoaded', function() {
             console.log('=== DOM Content Loaded ===');
             const urlParams = new URLSearchParams(window.location.search);
             const pdfFromUrl = urlParams.get('pdf');
@@ -617,13 +617,12 @@
                     updateConnectionInfo('Connecting via QR code...', 'info');
                     
                     // Connect to presenter using the RTC data from QR code
-                    try {
-                        await connectToPresenterFromQR(decodeURIComponent(rtcFromUrl));
+                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl)).then(() => {
                         showStatus(`Connected via QR code: Section ${section}, Page ${page}`, 'success');
-                    } catch (error) {
+                    }).catch((error) => {
                         console.error('Failed to connect via QR code:', error);
                         showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
-                    }
+                    });
                 } else {
                     showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
                 }
@@ -635,12 +634,11 @@
             } else {
                 // This is a presenter - initialize WebRTC
                 console.log('Initializing as presenter...');
-                try {
-                    await initializePresenter();
+                initializePresenter().then(() => {
                     console.log('WebRTC initialization completed');
-                } catch (error) {
+                }).catch((error) => {
                     console.error('WebRTC initialization failed, continuing without it:', error);
-                }
+                });
                 
                 showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
                 
