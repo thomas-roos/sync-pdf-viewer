@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Sync for GitHub Pages - Fixed Version</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        select, input, button { padding: 8px; margin: 5px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        #qrcode { border: 1px solid #ddd; margin: 10px 0; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #qrSection { display: none; margin-top: 20px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .url-display { background: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Sync for GitHub Pages</h1>
+        
+        <div>
+            <label for="chapterSelect">Section (1-14):</label>
+            <select id="chapterSelect">
+                <option value="">-- Select Section --</option>
+                <option value="1">Section 1</option>
+                <option value="2">Section 2</option>
+                <option value="3">Section 3</option>
+                <option value="4">Section 4</option>
+                <option value="5">Section 5</option>
+                <option value="6">Section 6</option>
+                <option value="7">Section 7</option>
+                <option value="8">Section 8</option>
+                <option value="9">Section 9</option>
+                <option value="10">Section 10</option>
+                <option value="11">Section 11</option>
+                <option value="12">Section 12</option>
+                <option value="13">Section 13</option>
+                <option value="14">Section 14</option>
+            </select>
+        </div>
+        
+        <div>
+            <label for="verseSelect">Page (1-20):</label>
+            <select id="verseSelect">
+                <option value="">-- Select Page --</option>
+                <option value="1">Page 1</option>
+                <option value="2">Page 2</option>
+                <option value="3">Page 3</option>
+                <option value="4">Page 4</option>
+                <option value="5">Page 5</option>
+                <option value="6">Page 6</option>
+                <option value="7">Page 7</option>
+                <option value="8">Page 8</option>
+                <option value="9">Page 9</option>
+                <option value="10">Page 10</option>
+                <option value="11">Page 11</option>
+                <option value="12">Page 12</option>
+                <option value="13">Page 13</option>
+                <option value="14">Page 14</option>
+                <option value="15">Page 15</option>
+                <option value="16">Page 16</option>
+                <option value="17">Page 17</option>
+                <option value="18">Page 18</option>
+                <option value="19">Page 19</option>
+                <option value="20">Page 20</option>
+            </select>
+        </div>
+        
+        <div>
+            <label for="selectedPdf">Selected PDF:</label>
+            <input type="text" id="selectedPdf" readonly style="background: #f8f9fa; font-weight: bold;" placeholder="Section_Page">
+        </div>
+        
+        <button id="generateBtn">Generate QR Code</button>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div id="qrSection">
+            <h3>QR Code:</h3>
+            <canvas id="qrcode"></canvas>
+            <h3>URL:</h3>
+            <div id="syncUrl" class="url-display"></div>
+            <button id="copyBtn">Copy URL</button>
+        </div>
+        
+        <!-- Viewer Section (for PDF display) -->
+        <div id="viewerSection" style="margin-top: 20px;">
+            <div id="folderInputSection" style="margin-bottom: 15px;">
+                <label for="localFolder">Local PDF Folder Path:</label>
+                <input type="text" id="localFolder" placeholder="Enter folder path (e.g., 'pdfs', 'documents')">
+                <button id="setFolderBtn">Set Folder</button>
+            </div>
+            
+            <div id="pdfViewerContainer" style="width: 100%; height: 600px; border: 1px solid #ddd;">
+                <iframe id="pdfViewer" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Global variables
+        let currentPdfName = '';
+        
+        // DOM elements
+        const chapterSelect = document.getElementById('chapterSelect');
+        const verseSelect = document.getElementById('verseSelect');
+        const selectedPdf = document.getElementById('selectedPdf');
+        const generateBtn = document.getElementById('generateBtn');
+        const statusDiv = document.getElementById('status');
+        const qrSection = document.getElementById('qrSection');
+        const syncUrlDiv = document.getElementById('syncUrl');
+        const copyBtn = document.getElementById('copyBtn');
+        const localFolder = document.getElementById('localFolder');
+        const setFolderBtn = document.getElementById('setFolderBtn');
+        const pdfViewer = document.getElementById('pdfViewer');
+        
+        // Hide QR section initially
+        qrSection.style.display = 'none';
+        
+        // Event listeners
+        chapterSelect.addEventListener('change', updateSelection);
+        verseSelect.addEventListener('change', updateSelection);
+        generateBtn.addEventListener('click', generateQR);
+        copyBtn.addEventListener('click', copyUrl);
+        setFolderBtn.addEventListener('click', updateLocalFolder);
+        
+        // Functions
+        function updateSelection() {
+            console.log('updateSelection called');
+            const section = chapterSelect.value;
+            const page = verseSelect.value;
+            
+            console.log('Section:', section, 'Page:', page);
+            
+            if (section && page) {
+                const pdfName = `${section}_${page}`;
+                selectedPdf.value = pdfName;
+                currentPdfName = `${pdfName}.pdf`;
+                console.log('Selection complete, PDF name set to:', currentPdfName);
+                showStatus(`Selected: Section ${section}, Page ${page}`, 'success');
+            } else {
+                selectedPdf.value = '';
+                currentPdfName = '';
+                console.log('Incomplete selection');
+                showStatus('Please select both section and page', 'info');
+            }
+        }
+        
+        function generateQR() {
+            console.log('generateQR called');
+            
+            const section = chapterSelect.value;
+            const page = verseSelect.value;
+            
+            if (!section || !page) {
+                showStatus('Please select both section and page', 'error');
+                return;
+            }
+            
+            const pdfName = `${section}_${page}.pdf`;
+            
+            // Create sync URL
+            const baseUrl = window.location.origin + window.location.pathname;
+            let syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            
+            console.log('Generated URL:', syncUrl);
+            
+            // Display URL
+            syncUrlDiv.textContent = syncUrl;
+            
+            // Show QR section
+            qrSection.style.display = 'block';
+            
+            // Generate QR code
+            if (typeof QRious !== 'undefined') {
+                const canvas = document.getElementById('qrcode');
+                
+                try {
+                    console.log('Generating QR code...');
+                    showStatus('Generating QR code...', 'info');
+                    
+                    const qr = new QRious({
+                        element: canvas,
+                        value: syncUrl,
+                        size: 300,
+                        level: 'L',
+                        background: '#ffffff',
+                        foreground: '#000000'
+                    });
+                    
+                    console.log('QR code generated successfully');
+                    showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
+                    
+                } catch (error) {
+                    console.error('QR generation error:', error);
+                    showStatus('QR generation failed: ' + error.message, 'error');
+                }
+            } else {
+                console.log('QRious not available');
+                showStatus('QR library not available', 'error');
+            }
+        }
+        
+        function copyUrl() {
+            const url = syncUrlDiv.textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                showStatus('URL copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy URL. Please copy manually.', 'error');
+            });
+        }
+        
+        function updateLocalFolder() {
+            const folderPath = localFolder.value;
+            if (folderPath) {
+                showStatus(`Local folder set to: ${folderPath}`, 'success');
+                
+                // Try to load the current PDF if selected
+                if (currentPdfName) {
+                    // Create PDF path
+                    const pdfPath = `${folderPath}/${currentPdfName}`;
+                    console.log('Loading PDF:', pdfPath);
+                    
+                    // Update iframe with PDF
+                    pdfViewer.src = pdfPath;
+                    console.log('PDF viewer updated with new path');
+                } else {
+                    console.log('No PDF selected yet');
+                }
+            } else {
+                showStatus('Please enter a local folder path', 'error');
+            }
+        }
+        
+        function showStatus(message, type) {
+            console.log('Status:', message, type);
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM Content Loaded');
+            showStatus('Select section and page, then click Generate QR Code', 'info');
+            
+            // Check URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            
+            if (pdfFromUrl) {
+                console.log('Loading as viewer with PDF:', pdfFromUrl);
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                
+                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
+                const pdfBase = currentPdfName.replace('.pdf', '');
+                const [section, page] = pdfBase.split('_');
+                
+                if (section && page) {
+                    chapterSelect.value = section;
+                    verseSelect.value = page;
+                    selectedPdf.value = pdfBase;
+                    showStatus(`PDF loaded: Section ${section}, Page ${page}`, 'success');
+                    
+                    // Focus on the local folder input to prompt the user
+                    localFolder.focus();
+                    localFolder.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        });
+    </script>
+</body>
+</html>
