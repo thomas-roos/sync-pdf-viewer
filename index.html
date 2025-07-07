@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Sync for GitHub Pages - Working Version</title>
+    <title>PDF Sync for GitHub Pages</title>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <style>
@@ -18,6 +18,7 @@
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         #qrSection { display: none; margin-top: 20px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
         .url-display { background: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; margin: 10px 0; }
+        #navigationControls { display: none; margin-top: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa; }
     </style>
 </head>
 <body>
@@ -26,7 +27,7 @@
         
         <div>
             <label for="chapterSelect">Section (1-14):</label>
-            <select id="chapterSelect" onchange="updatePdfSelection()">
+            <select id="chapterSelect">
                 <option value="">-- Select Section --</option>
                 <option value="1">Section 1</option>
                 <option value="2">Section 2</option>
@@ -47,7 +48,7 @@
         
         <div>
             <label for="verseSelect">Page (1-20):</label>
-            <select id="verseSelect" onchange="updatePdfSelection()">
+            <select id="verseSelect">
                 <option value="">-- Select Page --</option>
                 <option value="1">Page 1</option>
                 <option value="2">Page 2</option>
@@ -77,17 +78,16 @@
             <input type="text" id="selectedPdf" readonly style="background: #f8f9fa; font-weight: bold;" placeholder="Section_Page">
         </div>
         
-        <button id="generateBtn" onclick="generateSyncUrl()">Generate QR Code</button>
-        <button onclick="debugEnableButton()">Debug: Enable Button</button>
+        <button id="generateBtn">Generate QR Code</button>
         
         <!-- Navigation Controls for Presenter -->
-        <div id="navigationControls" style="display: none; margin-top: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa;">
+        <div id="navigationControls">
             <h4>Navigation Controls:</h4>
             <div style="margin-bottom: 10px;">
-                <button onclick="previousPdf()">← Previous</button>
-                <button onclick="nextPdf()">Next →</button>
-                <button onclick="jumpToStart()">Jump to Start</button>
-                <button onclick="jumpToEnd()">Jump to End</button>
+                <button id="prevBtn">← Previous</button>
+                <button id="nextBtn">Next →</button>
+                <button id="startBtn">Jump to Start</button>
+                <button id="endBtn">Jump to End</button>
             </div>
             <div style="font-size: 14px; color: #666;">
                 <strong>Keyboard Shortcuts:</strong> ← → (navigate), Home (start), End (end), Ctrl+Enter (generate QR)
@@ -99,25 +99,25 @@
         
         <div id="status" class="status" style="display: none;"></div>
         
-        <!-- Viewer Section (for PDF display) -->
-        <div id="viewerSection" style="margin-top: 20px;">
-            <div id="folderInputSection" style="margin-bottom: 15px;">
-                <label for="localFolder">Local PDF Folder Path:</label>
-                <input type="text" id="localFolder" placeholder="Enter folder path (e.g., 'pdfs', 'documents')">
-                <button onclick="updateLocalFolder()">Set Folder</button>
-            </div>
-            
-            <div id="pdfViewerContainer" style="width: 100%; height: 600px; border: 1px solid #ddd;">
-                <iframe id="pdfViewer" style="width: 100%; height: 100%; border: none;"></iframe>
-            </div>
-        </div>
-        
         <div id="qrSection">
             <h3>QR Code:</h3>
             <canvas id="qrcode"></canvas>
             <h3>URL:</h3>
             <div id="syncUrl" class="url-display"></div>
-            <button onclick="copySyncUrl()">Copy URL</button>
+            <button id="copyBtn">Copy URL</button>
+        </div>
+        
+        <!-- Viewer Section (for PDF display) -->
+        <div id="viewerSection" style="margin-top: 20px;">
+            <div id="folderInputSection" style="margin-bottom: 15px;">
+                <label for="localFolder">Local PDF Folder Path:</label>
+                <input type="text" id="localFolder" placeholder="Enter folder path (e.g., 'pdfs', 'documents')">
+                <button id="setFolderBtn">Set Folder</button>
+            </div>
+            
+            <div id="pdfViewerContainer" style="width: 100%; height: 600px; border: 1px solid #ddd;">
+                <iframe id="pdfViewer" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
         </div>
     </div>
     
@@ -139,47 +139,63 @@
             ]
         };
         
+        // Global variables
         let currentPdfName = '';
         
-        function showStatus(message, type) {
-            console.log('Status:', message, type);
-            const statusDiv = document.getElementById('status');
-            statusDiv.textContent = message;
-            statusDiv.className = `status ${type}`;
-            statusDiv.style.display = 'block';
-            
-            if (type === 'success' || type === 'info') {
-                setTimeout(() => {
-                    statusDiv.style.display = 'none';
-                }, 3000);
-            }
-        }
+        // DOM elements
+        const chapterSelect = document.getElementById('chapterSelect');
+        const verseSelect = document.getElementById('verseSelect');
+        const selectedPdf = document.getElementById('selectedPdf');
+        const generateBtn = document.getElementById('generateBtn');
+        const statusDiv = document.getElementById('status');
+        const qrSection = document.getElementById('qrSection');
+        const syncUrlDiv = document.getElementById('syncUrl');
+        const copyBtn = document.getElementById('copyBtn');
+        const localFolder = document.getElementById('localFolder');
+        const setFolderBtn = document.getElementById('setFolderBtn');
+        const pdfViewer = document.getElementById('pdfViewer');
+        const navigationControls = document.getElementById('navigationControls');
+        const currentPosition = document.getElementById('currentPosition');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const startBtn = document.getElementById('startBtn');
+        const endBtn = document.getElementById('endBtn');
         
-        function updatePdfSelection() {
-            console.log('=== updatePdfSelection called ===');
-            const section = document.getElementById('chapterSelect').value;
-            const page = document.getElementById('verseSelect').value;
-            const generateBtn = document.getElementById('generateBtn');
-            const navigationControls = document.getElementById('navigationControls');
+        // Hide QR section initially
+        qrSection.style.display = 'none';
+        
+        // Event listeners
+        chapterSelect.addEventListener('change', updateSelection);
+        verseSelect.addEventListener('change', updateSelection);
+        generateBtn.addEventListener('click', generateQR);
+        copyBtn.addEventListener('click', copyUrl);
+        setFolderBtn.addEventListener('click', updateLocalFolder);
+        prevBtn.addEventListener('click', previousPdf);
+        nextBtn.addEventListener('click', nextPdf);
+        startBtn.addEventListener('click', jumpToStart);
+        endBtn.addEventListener('click', jumpToEnd);
+        
+        // Functions
+        function updateSelection() {
+            console.log('updateSelection called');
+            const section = chapterSelect.value;
+            const page = verseSelect.value;
             
             console.log('Section:', section, 'Page:', page);
-            console.log('Generate button element:', generateBtn);
             
             if (section && page) {
                 const pdfName = `${section}_${page}`;
-                document.getElementById('selectedPdf').value = pdfName;
-                console.log('Setting button disabled to false');
-                // Button is now always enabled
+                selectedPdf.value = pdfName;
                 currentPdfName = `${pdfName}.pdf`;
                 
                 // Show navigation controls for presenter
-                if (isPresenter && navigationControls) {
+                if (isPresenter) {
                     navigationControls.style.display = 'block';
                     updateNavigationButtons();
                     updateCurrentPosition();
                 }
                 
-                console.log('Button enabled, PDF name set to:', currentPdfName);
+                console.log('Selection complete, PDF name set to:', currentPdfName);
                 showStatus(`Selected: Section ${section}, Page ${page}`, 'success');
                 
                 // Broadcast to connected viewers if this is a presenter
@@ -187,22 +203,21 @@
                     broadcastPdfChange(parseInt(section), parseInt(page));
                 }
             } else {
-                document.getElementById('selectedPdf').value = '';
-                // Button is now always enabled
+                selectedPdf.value = '';
                 currentPdfName = '';
+                
                 if (navigationControls) {
                     navigationControls.style.display = 'none';
                 }
-                console.log('No selection, but button remains enabled');
+                
+                console.log('Incomplete selection');
                 showStatus('Please select both section and page', 'info');
             }
         }
         
         function updateNavigationButtons() {
-            const section = parseInt(document.getElementById('chapterSelect').value);
-            const page = parseInt(document.getElementById('verseSelect').value);
-            const prevBtn = document.querySelector('button[onclick="previousPdf()"]');
-            const nextBtn = document.querySelector('button[onclick="nextPdf()"]');
+            const section = parseInt(chapterSelect.value);
+            const page = parseInt(verseSelect.value);
             
             if (prevBtn && nextBtn) {
                 // Disable previous if at start (1_1)
@@ -214,22 +229,21 @@
         }
         
         function updateCurrentPosition() {
-            const section = document.getElementById('chapterSelect').value;
-            const page = document.getElementById('verseSelect').value;
-            const positionSpan = document.getElementById('currentPosition');
+            const section = chapterSelect.value;
+            const page = verseSelect.value;
             
-            if (positionSpan) {
+            if (currentPosition) {
                 if (section && page) {
-                    positionSpan.textContent = `Section ${section}, Page ${page}`;
+                    currentPosition.textContent = `Section ${section}, Page ${page}`;
                 } else {
-                    positionSpan.textContent = 'Section -, Page -';
+                    currentPosition.textContent = 'Section -, Page -';
                 }
             }
         }
         
         function previousPdf() {
-            const section = parseInt(document.getElementById('chapterSelect').value);
-            const page = parseInt(document.getElementById('verseSelect').value);
+            const section = parseInt(chapterSelect.value);
+            const page = parseInt(verseSelect.value);
             
             if (!section || !page) return;
             
@@ -246,18 +260,18 @@
             }
             
             // Update dropdowns
-            document.getElementById('chapterSelect').value = newSection.toString();
-            document.getElementById('verseSelect').value = newPage.toString();
+            chapterSelect.value = newSection.toString();
+            verseSelect.value = newPage.toString();
             
             // Update PDF selection
-            updatePdfSelection();
+            updateSelection();
             
             showStatus(`Navigated to Section ${newSection}, Page ${newPage}`, 'info');
         }
         
         function nextPdf() {
-            const section = parseInt(document.getElementById('chapterSelect').value);
-            const page = parseInt(document.getElementById('verseSelect').value);
+            const section = parseInt(chapterSelect.value);
+            const page = parseInt(verseSelect.value);
             
             if (!section || !page) return;
             
@@ -274,27 +288,27 @@
             }
             
             // Update dropdowns
-            document.getElementById('chapterSelect').value = newSection.toString();
-            document.getElementById('verseSelect').value = newPage.toString();
+            chapterSelect.value = newSection.toString();
+            verseSelect.value = newPage.toString();
             
             // Update PDF selection
-            updatePdfSelection();
+            updateSelection();
             
             showStatus(`Navigated to Section ${newSection}, Page ${newPage}`, 'info');
         }
         
         function jumpToStart() {
-            document.getElementById('chapterSelect').value = '1';
-            document.getElementById('verseSelect').value = '1';
-            updatePdfSelection();
+            chapterSelect.value = '1';
+            verseSelect.value = '1';
+            updateSelection();
             
             showStatus('Jumped to start: Section 1, Page 1', 'info');
         }
         
         function jumpToEnd() {
-            document.getElementById('chapterSelect').value = '14';
-            document.getElementById('verseSelect').value = '20';
-            updatePdfSelection();
+            chapterSelect.value = '14';
+            verseSelect.value = '20';
+            updateSelection();
             
             showStatus('Jumped to end: Section 14, Page 20', 'info');
         }
@@ -494,28 +508,21 @@
             switch (data.type) {
                 case 'pdfChange':
                     // Update dropdowns to match presenter
-                    document.getElementById('chapterSelect').value = data.section.toString();
-                    document.getElementById('verseSelect').value = data.page.toString();
-                    document.getElementById('selectedPdf').value = `${data.section}_${data.page}`;
+                    chapterSelect.value = data.section.toString();
+                    verseSelect.value = data.page.toString();
+                    selectedPdf.value = `${data.section}_${data.page}`;
                     currentPdfName = `${data.section}_${data.page}.pdf`;
                     
                     // Update UI and load PDF if folder is set
-                    const localFolder = document.getElementById('localFolder')?.value;
-                    if (localFolder) {
-                        // Try to load the PDF directly
-                        const pdfPath = `${localFolder}/${currentPdfName}`;
+                    const folderPath = localFolder.value;
+                    if (folderPath) {
+                        // Create PDF path
+                        const pdfPath = `${folderPath}/${currentPdfName}`;
                         console.log('Loading PDF:', pdfPath);
                         
-                        // Create iframe with PDF
-                        const pdfViewer = document.getElementById('pdfViewer');
-                        if (pdfViewer) {
-                            pdfViewer.src = pdfPath;
-                            console.log('PDF viewer updated with new path');
-                        } else {
-                            console.error('PDF viewer element not found');
-                        }
-                    } else {
-                        console.log('Local folder not set, cannot load PDF');
+                        // Update iframe with PDF
+                        pdfViewer.src = pdfPath;
+                        console.log('PDF viewer updated with new path');
                     }
                     
                     showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
@@ -550,21 +557,18 @@
             }
         }
         
-        function generateSyncUrl() {
-            console.log('=== generateSyncUrl called ===');
+        function generateQR() {
+            console.log('generateQR called');
             
-            const section = document.getElementById('chapterSelect').value;
-            const page = document.getElementById('verseSelect').value;
-            
-            console.log('Section:', section, 'Page:', page);
+            const section = chapterSelect.value;
+            const page = verseSelect.value;
             
             if (!section || !page) {
-                showStatus('Please select both section and page before generating QR code', 'error');
+                showStatus('Please select both section and page', 'error');
                 return;
             }
             
             const pdfName = `${section}_${page}.pdf`;
-            currentPdfName = pdfName;
             
             // Create sync URL with WebRTC connection data
             const baseUrl = window.location.origin + window.location.pathname;
@@ -581,47 +585,29 @@
             console.log('URL length:', syncUrl.length);
             
             // Display URL
-            const syncUrlElement = document.getElementById('syncUrl');
-            if (syncUrlElement) {
-                syncUrlElement.textContent = syncUrl;
-                console.log('URL displayed');
-            }
+            syncUrlDiv.textContent = syncUrl;
             
             // Show QR section
-            const qrSection = document.getElementById('qrSection');
-            if (qrSection) {
-                qrSection.style.display = 'block';
-                console.log('QR section shown');
-            }
+            qrSection.style.display = 'block';
             
-            // Generate QR code using QRious
-            console.log('QRious available:', typeof QRious !== 'undefined');
-            
+            // Generate QR code
             if (typeof QRious !== 'undefined') {
                 const canvas = document.getElementById('qrcode');
-                
-                if (!canvas) {
-                    console.error('Canvas not found');
-                    showStatus('QR canvas not found', 'error');
-                    return;
-                }
                 
                 try {
                     console.log('Generating QR code...');
                     showStatus('Generating QR code...', 'info');
                     
-                    // Generate QR code
                     const qr = new QRious({
                         element: canvas,
                         value: syncUrl,
                         size: 300,
-                        level: 'L', // Lower error correction = smaller QR code
+                        level: 'L',
                         background: '#ffffff',
                         foreground: '#000000'
                     });
                     
                     console.log('QR code generated successfully');
-                    canvas.style.display = 'block';
                     
                     const statusMsg = connectionCode ? 
                         `QR code generated with real-time sync for Section ${section}, Page ${page}` :
@@ -638,8 +624,8 @@
             }
         }
         
-        function copySyncUrl() {
-            const url = document.getElementById('syncUrl').textContent;
+        function copyUrl() {
+            const url = syncUrlDiv.textContent;
             navigator.clipboard.writeText(url).then(() => {
                 showStatus('URL copied to clipboard!', 'success');
             }).catch(() => {
@@ -648,24 +634,19 @@
         }
         
         function updateLocalFolder() {
-            const localFolder = document.getElementById('localFolder').value;
-            if (localFolder) {
-                showStatus(`Local folder set to: ${localFolder}`, 'success');
+            const folderPath = localFolder.value;
+            if (folderPath) {
+                showStatus(`Local folder set to: ${folderPath}`, 'success');
                 
                 // Try to load the current PDF if selected
                 if (currentPdfName) {
                     // Create PDF path
-                    const pdfPath = `${localFolder}/${currentPdfName}`;
+                    const pdfPath = `${folderPath}/${currentPdfName}`;
                     console.log('Loading PDF:', pdfPath);
                     
-                    // Create iframe with PDF
-                    const pdfViewer = document.getElementById('pdfViewer');
-                    if (pdfViewer) {
-                        pdfViewer.src = pdfPath;
-                        console.log('PDF viewer updated with new path');
-                    } else {
-                        console.error('PDF viewer element not found');
-                    }
+                    // Update iframe with PDF
+                    pdfViewer.src = pdfPath;
+                    console.log('PDF viewer updated with new path');
                 } else {
                     console.log('No PDF selected yet');
                 }
@@ -674,112 +655,22 @@
             }
         }
         
-        function debugEnableButton() {
-            console.log('Debug: Manually enabling Generate QR Code button');
-            const generateBtn = document.getElementById('generateBtn');
-            if (generateBtn) {
-                generateBtn.disabled = false;
-                showStatus('Generate QR Code button manually enabled', 'success');
-            } else {
-                console.error('Generate button not found');
-                showStatus('Error: Generate button not found', 'error');
+        function showStatus(message, type) {
+            console.log('Status:', message, type);
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 3000);
             }
         }
         
-        // Initialize on page load
+        // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('=== DOM Content Loaded ===');
-            console.log('QRious available:', typeof QRious !== 'undefined');
-            
-            // Add direct event listeners to dropdowns
-            const chapterSelect = document.getElementById('chapterSelect');
-            const verseSelect = document.getElementById('verseSelect');
-            const generateBtn = document.getElementById('generateBtn');
-            
-            if (chapterSelect) {
-                chapterSelect.addEventListener('change', updatePdfSelection);
-                console.log('Added change listener to chapter select');
-            }
-            
-            if (verseSelect) {
-                verseSelect.addEventListener('change', updatePdfSelection);
-                console.log('Added change listener to verse select');
-            }
-            
-            // Check initial values
-            setTimeout(function() {
-                if (chapterSelect && verseSelect && generateBtn) {
-                    const section = chapterSelect.value;
-                    const page = verseSelect.value;
-                    console.log('Initial values - Section:', section, 'Page:', page);
-                    
-                    if (section && page) {
-                        console.log('Both section and page are selected, enabling button');
-                        generateBtn.disabled = false;
-                        document.getElementById('selectedPdf').value = `${section}_${page}`;
-                    }
-                }
-            }, 500);
-            
-            const urlParams = new URLSearchParams(window.location.search);
-            const pdfFromUrl = urlParams.get('pdf');
-            const rtcFromUrl = urlParams.get('r') || urlParams.get('rtc'); // Support both short and long parameter names
-            
-            if (pdfFromUrl) {
-                console.log('Loading as viewer with PDF:', pdfFromUrl);
-                isPresenter = false;
-                currentPdfName = decodeURIComponent(pdfFromUrl);
-                
-                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
-                const pdfBase = currentPdfName.replace('.pdf', '');
-                const [section, page] = pdfBase.split('_');
-                
-                if (section && page) {
-                    document.getElementById('chapterSelect').value = section;
-                    document.getElementById('verseSelect').value = page;
-                    document.getElementById('selectedPdf').value = pdfBase;
-                }
-                
-                // Check if this is a WebRTC connection from QR code
-                if (rtcFromUrl) {
-                    // This is a viewer connecting via QR with real-time sync
-                    showStatus('Connecting via QR code for real-time sync...', 'info');
-                    
-                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl)).then(() => {
-                        showStatus(`Connected with real-time sync: Section ${section}, Page ${page}`, 'success');
-                        
-                        // Focus on the local folder input to prompt the user
-                        const localFolderInput = document.getElementById('localFolder');
-                        if (localFolderInput) {
-                            localFolderInput.focus();
-                            localFolderInput.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    }).catch((error) => {
-                        console.error('Failed to connect via QR code:', error);
-                        showStatus(`PDF loaded: Section ${section}, Page ${page} (no real-time sync)`, 'success');
-                    });
-                } else {
-                    showStatus(`PDF loaded: Section ${section}, Page ${page}`, 'success');
-                    
-                    // Focus on the local folder input to prompt the user
-                    const localFolderInput = document.getElementById('localFolder');
-                    if (localFolderInput) {
-                        localFolderInput.focus();
-                        localFolderInput.scrollIntoView({ behavior: 'smooth' });
-                    }
-            } else {
-                // This is a presenter - initialize WebRTC
-                console.log('Initializing as presenter...');
-                isPresenter = true;
-                
-                initializePresenter().then(() => {
-                    console.log('WebRTC initialization completed');
-                }).catch((error) => {
-                    console.error('WebRTC initialization failed, continuing without it:', error);
-                });
-                
-                showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
-            }
+            console.log('DOM Content Loaded');
             
             // Add keyboard shortcuts
             document.addEventListener('keydown', function(event) {
@@ -803,48 +694,86 @@
                         break;
                     case 'Enter':
                         if (event.ctrlKey) {
-                            const generateBtn = document.getElementById('generateBtn');
-                            if (!generateBtn.disabled) {
-                                generateSyncUrl();
-                            }
+                            generateQR();
                         }
                         break;
                 }
             });
             
             // Auto-load PDF when local folder is set
-            const localFolderInput = document.getElementById('localFolder');
-            if (localFolderInput) {
-                localFolderInput.addEventListener('input', function() {
+            if (localFolder) {
+                localFolder.addEventListener('input', function() {
                     if (this.value && currentPdfName) {
                         updateLocalFolder();
                     }
                 });
                 
                 // Handle Enter key in the folder input
-                localFolderInput.addEventListener('keydown', function(event) {
+                localFolder.addEventListener('keydown', function(event) {
                     if (event.key === 'Enter') {
                         updateLocalFolder();
                     }
                 });
             }
             
-            // Add direct event listeners to dropdowns as a backup
-            const chapterSelect = document.getElementById('chapterSelect');
-            const verseSelect = document.getElementById('verseSelect');
+            // Check URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            const rtcFromUrl = urlParams.get('r') || urlParams.get('rtc'); // Support both short and long parameter names
             
-            if (chapterSelect) {
-                chapterSelect.addEventListener('change', function() {
-                    console.log('Chapter select change event fired');
-                    updatePdfSelection();
+            if (pdfFromUrl) {
+                console.log('Loading as viewer with PDF:', pdfFromUrl);
+                isPresenter = false;
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                
+                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
+                const pdfBase = currentPdfName.replace('.pdf', '');
+                const [section, page] = pdfBase.split('_');
+                
+                if (section && page) {
+                    chapterSelect.value = section;
+                    verseSelect.value = page;
+                    selectedPdf.value = pdfBase;
+                }
+                
+                // Check if this is a WebRTC connection from QR code
+                if (rtcFromUrl) {
+                    // This is a viewer connecting via QR with real-time sync
+                    showStatus('Connecting via QR code for real-time sync...', 'info');
+                    
+                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl)).then(() => {
+                        showStatus(`Connected with real-time sync: Section ${section}, Page ${page}`, 'success');
+                        
+                        // Focus on the local folder input to prompt the user
+                        if (localFolder) {
+                            localFolder.focus();
+                            localFolder.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    }).catch((error) => {
+                        console.error('Failed to connect via QR code:', error);
+                        showStatus(`PDF loaded: Section ${section}, Page ${page} (no real-time sync)`, 'success');
+                    });
+                } else {
+                    showStatus(`PDF loaded: Section ${section}, Page ${page}`, 'success');
+                    
+                    // Focus on the local folder input to prompt the user
+                    if (localFolder) {
+                        localFolder.focus();
+                        localFolder.scrollIntoView({ behavior: 'smooth' });
+                    }
+                }
+            } else {
+                // This is a presenter - initialize WebRTC
+                console.log('Initializing as presenter...');
+                isPresenter = true;
+                
+                initializePresenter().then(() => {
+                    console.log('WebRTC initialization completed');
+                }).catch((error) => {
+                    console.error('WebRTC initialization failed, continuing without it:', error);
                 });
-            }
-            
-            if (verseSelect) {
-                verseSelect.addEventListener('change', function() {
-                    console.log('Verse select change event fired');
-                    updatePdfSelection();
-                });
+                
+                showStatus('Select section and page, then click Generate QR Code', 'info');
             }
         });
     </script>
