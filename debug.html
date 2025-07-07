@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug PDF Sync</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    
+    <div>
+        <label for="chapterSelect">Section (1-14):</label>
+        <select id="chapterSelect" onchange="updatePdfSelection()">
+            <option value="">-- Select Section --</option>
+            <option value="1">Section 1</option>
+            <option value="2">Section 2</option>
+            <option value="3">Section 3</option>
+        </select>
+    </div>
+    
+    <div>
+        <label for="verseSelect">Page (1-20):</label>
+        <select id="verseSelect" onchange="updatePdfSelection()">
+            <option value="">-- Select Page --</option>
+            <option value="1">Page 1</option>
+            <option value="2">Page 2</option>
+            <option value="3">Page 3</option>
+        </select>
+    </div>
+    
+    <div>
+        <label for="selectedPdf">Selected PDF:</label>
+        <input type="text" id="selectedPdf" readonly style="background: #f8f9fa; font-weight: bold;" placeholder="Section_Page">
+    </div>
+    
+    <button id="generateBtn" disabled>Generate QR Code</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        function updatePdfSelection() {
+            console.log('updatePdfSelection called');
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const generateBtn = document.getElementById('generateBtn');
+            
+            console.log('Section:', section, 'Page:', page);
+            
+            if (section && page) {
+                const pdfName = `${section}_${page}`;
+                document.getElementById('selectedPdf').value = pdfName;
+                generateBtn.disabled = false;
+                document.getElementById('status').textContent = `Selected: ${pdfName}`;
+                console.log('PDF selected:', pdfName);
+            } else {
+                document.getElementById('selectedPdf').value = '';
+                generateBtn.disabled = true;
+                document.getElementById('status').textContent = 'Please select both section and page';
+                console.log('Selection incomplete');
+            }
+        }
+        
+        // Test on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, testing function...');
+            updatePdfSelection();
+        });
+    </script>
+</body>
+</html>
