@@ -87,6 +87,7 @@
         <button id="generateBtn" onclick="generateQR()">Generate QR Code</button>
         <button onclick="testButton()">Test Button</button>
         <button onclick="generateSimpleQR()">Simple QR</button>
+        <button onclick="checkDataChannel()">Check Data Channel</button>
         
         <!-- WebRTC Connection Status -->
         <div id="connectionStatus">
@@ -145,6 +146,8 @@
         let connectedPeers = new Map();
         let messageQueue = []; // Queue for messages when data channel isn't ready
         let dataChannelReady = false; // Track data channel readiness
+        let connectionTimeout = null; // Timeout for connection attempts
+        let maxConnectionTime = 30000; // 30 seconds timeout
         
         // WebRTC configuration using free STUN servers
         const rtcConfig = {
@@ -421,8 +424,29 @@
                     
                     if (peerConnection.connectionState === 'connected') {
                         showStatus('Viewer connected via QR code - real-time sync active', 'success');
+                        
+                        // Force check data channel state when peer connection is established
+                        setTimeout(() => {
+                            if (dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
+                                console.log('Data channel is open but not marked as ready - fixing');
+                                dataChannelReady = true;
+                                updateConnectionStatus('Connected', 'Data channel ready (forced check)');
+                                processMessageQueue();
+                            }
+                        }, 1000);
+                        
                     } else if (peerConnection.connectionState === 'disconnected') {
                         showStatus('Viewer disconnected - QR codes will work normally', 'info');
+                        dataChannelReady = false;
+                    } else if (peerConnection.connectionState === 'failed') {
+                        showStatus('Connection failed - trying to reconnect', 'error');
+                        dataChannelReady = false;
+                        // Auto-reconnect on failure
+                        setTimeout(() => {
+                            if (isPresenter) {
+                                reconnectWebRTC();
+                            }
+                        }, 2000);
                     }
                 };
                 
@@ -555,6 +579,24 @@
                         peerConnection.connectionState.charAt(0).toUpperCase() + peerConnection.connectionState.slice(1),
                         `Connection state: ${peerConnection.connectionState}`
                     );
+                    
+                    // Force check data channel when connection is established
+                    if (peerConnection.connectionState === 'connected') {
+                        setTimeout(() => {
+                            if (dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
+                                console.log('Data channel is open but not marked as ready - fixing');
+                                dataChannelReady = true;
+                                updateConnectionStatus('Connected', 'Data channel ready (forced check)');
+                                
+                                // Send viewer info to presenter
+                                sendMessage({
+                                    type: 'viewerConnected',
+                                    deviceName: 'Viewer-' + Math.random().toString(36).substr(2, 3),
+                                    timestamp: new Date().toISOString()
+                                });
+                            }
+                        }, 1000);
+                    }
                 };
                 
                 peerConnection.onicegatheringstatechange = () => {
@@ -916,7 +958,34 @@
             }
         }
         
-        // Alternative QR code generation using a different approach
+        function checkDataChannel() {
+            console.log('=== Data Channel Status Check ===');
+            console.log('peerConnection:', peerConnection);
+            console.log('peerConnection.connectionState:', peerConnection ? peerConnection.connectionState : 'null');
+            console.log('dataChannel:', dataChannel);
+            console.log('dataChannel.readyState:', dataChannel ? dataChannel.readyState : 'null');
+            console.log('dataChannelReady flag:', dataChannelReady);
+            console.log('messageQueue length:', messageQueue.length);
+            
+            let status = 'Data Channel Status:\n';
+            status += `Peer Connection: ${peerConnection ? peerConnection.connectionState : 'null'}\n`;
+            status += `Data Channel: ${dataChannel ? dataChannel.readyState : 'null'}\n`;
+            status += `Ready Flag: ${dataChannelReady}\n`;
+            status += `Queue Length: ${messageQueue.length}`;
+            
+            alert(status);
+            
+            // Try to force data channel ready if conditions are met
+            if (peerConnection && peerConnection.connectionState === 'connected' && 
+                dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
+                
+                console.log('Forcing data channel ready state');
+                dataChannelReady = true;
+                updateConnectionStatus('Connected', 'Data channel forced ready');
+                processMessageQueue();
+                alert('Data channel forced ready and queue processed!');
+            }
+        }
         function generateSimpleQR() {
             console.log('Trying simple QR generation...');
             
@@ -1093,9 +1162,19 @@
             
             // Set up periodic message queue processing
             setInterval(() => {
-                if (messageQueue.length > 0 && dataChannelReady && dataChannel && dataChannel.readyState === 'open') {
+                if (messageQueue.length > 0) {
                     console.log('Periodic queue check: processing messages');
-                    processMessageQueue();
+                    
+                    // Check if data channel is actually ready even if flag isn't set
+                    if (dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
+                        console.log('Data channel is open but flag not set - fixing');
+                        dataChannelReady = true;
+                        updateConnectionStatus('Connected', 'Data channel ready (periodic check)');
+                    }
+                    
+                    if (dataChannelReady && dataChannel && dataChannel.readyState === 'open') {
+                        processMessageQueue();
+                    }
                 }
             }, 2000); // Check every 2 seconds
             
