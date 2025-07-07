@@ -798,6 +798,24 @@
                     }
                 });
             }
+            
+            // Add direct event listeners to dropdowns as a backup
+            const chapterSelect = document.getElementById('chapterSelect');
+            const verseSelect = document.getElementById('verseSelect');
+            
+            if (chapterSelect) {
+                chapterSelect.addEventListener('change', function() {
+                    console.log('Chapter select change event fired');
+                    updatePdfSelection();
+                });
+            }
+            
+            if (verseSelect) {
+                verseSelect.addEventListener('change', function() {
+                    console.log('Verse select change event fired');
+                    updatePdfSelection();
+                });
+            }
         });
     </script>
 </body>
