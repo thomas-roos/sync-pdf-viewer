@@ -382,6 +382,12 @@
                     updateNavigationButtons();
                     updateCurrentPosition();
                 }
+                
+                // Auto-update the PDF display to show current selection
+                setTimeout(() => {
+                    loadCurrentPDF();
+                }, 100);
+                
             } else {
                 document.getElementById('selectedPdf').value = '';
                 generateBtn.disabled = true;
@@ -389,6 +395,11 @@
                 if (navigationControls) {
                     navigationControls.style.display = 'none';
                 }
+                
+                // Show "no selection" fallback
+                setTimeout(() => {
+                    loadCurrentPDF();
+                }, 100);
             }
         }
         
@@ -607,6 +618,11 @@
                 // This is a presenter - initialize WebRTC
                 initializePresenter();
                 showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
+                
+                // Show the "no selection" fallback on presenter side
+                setTimeout(() => {
+                    loadCurrentPDF();
+                }, 500);
             }
         });
         
@@ -1077,7 +1093,26 @@
             const pdfName = currentPdfName;
             
             if (!pdfName) {
-                showStatus('No PDF selected', 'error');
+                // Fallback: Show "no selection" message for presenter
+                const pdfViewer = document.getElementById('pdfViewer');
+                const noSelectionHTML = `
+                    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: #f8f9fa; border: 2px dashed #6c757d; text-align: center; padding: 20px;">
+                        <h2 style="color: #6c757d; margin-bottom: 20px;">📄 PDF Sync Ready</h2>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                            <h3 style="margin: 0 0 10px 0; color: #333;">No PDF Selected</h3>
+                            <div style="font-size: 16px; color: #666;">Select section and page above to begin</div>
+                        </div>
+                        <div style="background: #e2e3e5; padding: 15px; border-radius: 5px; border: 1px solid #d6d8db; max-width: 400px;">
+                            <p style="margin: 0; color: #495057;">
+                                <strong>Ready to sync:</strong><br>
+                                Choose section (1-14) and page (1-20)<br>
+                                Generate QR code for viewers
+                            </p>
+                        </div>
+                    </div>
+                `;
+                pdfViewer.srcdoc = noSelectionHTML;
+                showStatus('Select section and page to begin PDF sync', 'info');
                 return;
             }
             
