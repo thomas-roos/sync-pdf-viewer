@@ -177,7 +177,7 @@
         
         // Functions
         function updateSelection() {
-            console.log('updateSelection called');
+            console.log('=== updateSelection called ===');
             const section = chapterSelect.value;
             const page = verseSelect.value;
             
@@ -193,15 +193,16 @@
                     navigationControls.style.display = 'block';
                     updateNavigationButtons();
                     updateCurrentPosition();
+                    
+                    // Broadcast to connected viewers
+                    console.log('Broadcasting change to viewers...');
+                    setTimeout(() => {
+                        broadcastPdfChange(parseInt(section), parseInt(page));
+                    }, 100); // Small delay to ensure UI updates first
                 }
                 
                 console.log('Selection complete, PDF name set to:', currentPdfName);
                 showStatus(`Selected: Section ${section}, Page ${page}`, 'success');
-                
-                // Broadcast to connected viewers if this is a presenter
-                if (isPresenter) {
-                    broadcastPdfChange(parseInt(section), parseInt(page));
-                }
             } else {
                 selectedPdf.value = '';
                 currentPdfName = '';
@@ -503,10 +504,12 @@
         }
         
         function handleDataChannelMessage(data) {
-            console.log('Received message:', data);
+            console.log('=== Received WebRTC message ===', data);
             
             switch (data.type) {
                 case 'pdfChange':
+                    console.log('Received pdfChange message:', data);
+                    
                     // Update dropdowns to match presenter
                     chapterSelect.value = data.section.toString();
                     verseSelect.value = data.page.toString();
@@ -523,6 +526,13 @@
                         // Update iframe with PDF
                         pdfViewer.src = pdfPath;
                         console.log('PDF viewer updated with new path');
+                        
+                        // Force reload the iframe
+                        setTimeout(() => {
+                            pdfViewer.contentWindow.location.reload();
+                        }, 100);
+                    } else {
+                        console.warn('Local folder not set, cannot load PDF');
                     }
                     
                     showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
@@ -538,13 +548,23 @@
         
         function sendMessage(message) {
             if (dataChannel && dataChannel.readyState === 'open') {
-                dataChannel.send(JSON.stringify(message));
-                return true;
+                try {
+                    console.log('Sending message via sendMessage:', message);
+                    dataChannel.send(JSON.stringify(message));
+                    return true;
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    return false;
+                }
+            } else {
+                console.warn('Data channel not ready, message not sent:', message);
+                return false;
             }
-            return false;
         }
         
         function broadcastPdfChange(section, page) {
+            console.log('=== Broadcasting PDF change ===', section, page);
+            
             const message = {
                 type: 'pdfChange',
                 section: section,
