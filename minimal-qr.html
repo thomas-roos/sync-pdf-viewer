@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal QR Test</title>
+</head>
+<body>
+    <h1>Minimal QR Code Test</h1>
+    
+    <div>
+        <input type="text" id="textInput" value="https://thomas-roos.github.io/sync-pdf-viewer?pdf=3_15.pdf" style="width: 400px;">
+        <button onclick="generateQR()">Generate QR</button>
+    </div>
+    
+    <div id="qr-container" style="margin: 20px 0;">
+        <canvas id="qr-canvas"></canvas>
+    </div>
+    
+    <div id="status"></div>
+    
+    <!-- Try the most reliable QR library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    
+    <script>
+        function generateQR() {
+            const text = document.getElementById('textInput').value;
+            const canvas = document.getElementById('qr-canvas');
+            const status = document.getElementById('status');
+            
+            console.log('Generating QR for:', text);
+            status.textContent = 'Generating...';
+            
+            try {
+                // Use QRious library (more reliable)
+                const qr = new QRious({
+                    element: canvas,
+                    value: text,
+                    size: 256,
+                    background: '#ffffff',
+                    foreground: '#000000'
+                });
+                
+                status.textContent = 'QR Code generated successfully!';
+                status.style.color = 'green';
+                console.log('QR generated successfully');
+                
+            } catch (error) {
+                console.error('QR generation failed:', error);
+                status.textContent = 'QR generation failed: ' + error.message;
+                status.style.color = 'red';
+            }
+        }
+        
+        // Test on page load
+        window.onload = function() {
+            console.log('Page loaded');
+            console.log('QRious available:', typeof QRious !== 'undefined');
+            
+            if (typeof QRious !== 'undefined') {
+                generateQR(); // Auto-generate on load
+            } else {
+                document.getElementById('status').textContent = 'QRious library not loaded';
+                document.getElementById('status').style.color = 'red';
+            }
+        };
+    </script>
+</body>
+</html>
