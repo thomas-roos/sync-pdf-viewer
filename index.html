@@ -86,6 +86,7 @@
         
         <button id="generateBtn" onclick="generateQR()">Generate QR Code</button>
         <button onclick="testButton()">Test Button</button>
+        <button onclick="generateSimpleQR()">Simple QR</button>
         
         <!-- WebRTC Connection Status -->
         <div id="connectionStatus">
@@ -705,16 +706,16 @@
         
         function generateQR() {
             console.log('=== generateQR called ===');
-            alert('Generate QR Code button clicked!'); // Debug alert
             
             const section = chapterSelect.value;
             const page = verseSelect.value;
             
             console.log('Section:', section, 'Page:', page);
+            console.log('QRious available:', typeof QRious !== 'undefined');
             
             if (!section || !page) {
                 showStatus('Please select both section and page before generating QR code', 'error');
-                alert('Please select both section and page'); // Debug alert
+                alert('Please select both section and page');
                 return;
             }
             
@@ -726,7 +727,6 @@
             
             // Add WebRTC connection data if available
             if (connectionCode) {
-                // Use a shorter parameter name to reduce QR code size
                 syncUrl += `&r=${encodeURIComponent(connectionCode)}`;
                 console.log('Added WebRTC connection code to QR');
             }
@@ -734,55 +734,104 @@
             console.log('Generated URL:', syncUrl);
             console.log('URL length:', syncUrl.length);
             
-            // Display URL
+            // Display URL first
             if (syncUrlDiv) {
                 syncUrlDiv.textContent = syncUrl;
+                console.log('URL displayed in div');
+            } else {
+                console.error('syncUrlDiv not found');
             }
             
             // Show QR section
             if (qrSection) {
                 qrSection.style.display = 'block';
+                console.log('QR section shown');
+            } else {
+                console.error('qrSection not found');
             }
             
-            // Generate QR code
-            if (typeof QRious !== 'undefined') {
-                const canvas = document.getElementById('qrcode');
+            // Try to generate QR code with multiple approaches
+            const canvas = document.getElementById('qrcode');
+            console.log('Canvas element:', canvas);
+            
+            if (!canvas) {
+                console.error('QR canvas not found');
+                alert('QR canvas element not found');
+                return;
+            }
+            
+            // Check if QRious is available
+            if (typeof QRious === 'undefined') {
+                console.error('QRious library not loaded');
+                alert('QRious library not loaded - check network connection');
                 
-                if (!canvas) {
-                    console.error('QR canvas not found');
-                    alert('QR canvas not found'); // Debug alert
-                    return;
-                }
+                // Fallback: try to load QRious dynamically
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js';
+                script.onload = function() {
+                    console.log('QRious loaded dynamically');
+                    generateQRCodeWithQRious(canvas, syncUrl, section, page);
+                };
+                script.onerror = function() {
+                    console.error('Failed to load QRious dynamically');
+                    alert('Failed to load QR code library');
+                };
+                document.head.appendChild(script);
+                return;
+            }
+            
+            // Generate QR code with QRious
+            generateQRCodeWithQRious(canvas, syncUrl, section, page);
+        }
+        
+        function generateQRCodeWithQRious(canvas, syncUrl, section, page) {
+            try {
+                console.log('Generating QR code with QRious...');
+                console.log('Canvas:', canvas);
+                console.log('URL:', syncUrl);
                 
-                try {
-                    console.log('Generating QR code...');
-                    showStatus('Generating QR code...', 'info');
-                    
-                    const qr = new QRious({
-                        element: canvas,
-                        value: syncUrl,
-                        size: 300,
-                        level: 'L',
-                        background: '#ffffff',
-                        foreground: '#000000'
-                    });
-                    
-                    console.log('QR code generated successfully');
-                    
-                    const statusMsg = connectionCode ? 
-                        `QR code generated with real-time sync for Section ${section}, Page ${page}` :
-                        `QR code generated for Section ${section}, Page ${page} (basic sync)`;
-                    showStatus(statusMsg, 'success');
-                    
-                } catch (error) {
-                    console.error('QR generation error:', error);
-                    showStatus('QR generation failed: ' + error.message, 'error');
-                    alert('QR generation failed: ' + error.message); // Debug alert
+                showStatus('Generating QR code...', 'info');
+                
+                // Clear any existing content
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                const qr = new QRious({
+                    element: canvas,
+                    value: syncUrl,
+                    size: 300,
+                    level: 'L',
+                    background: '#ffffff',
+                    foreground: '#000000'
+                });
+                
+                console.log('QR code object created:', qr);
+                console.log('Canvas width:', canvas.width, 'height:', canvas.height);
+                
+                // Force a repaint
+                canvas.style.display = 'none';
+                canvas.offsetHeight; // Trigger reflow
+                canvas.style.display = 'block';
+                
+                console.log('QR code generated successfully');
+                
+                const statusMsg = connectionCode ? 
+                    `QR code generated with real-time sync for Section ${section}, Page ${page}` :
+                    `QR code generated for Section ${section}, Page ${page} (basic sync)`;
+                showStatus(statusMsg, 'success');
+                
+            } catch (error) {
+                console.error('QR generation error:', error);
+                showStatus('QR generation failed: ' + error.message, 'error');
+                alert('QR generation failed: ' + error.message);
+                
+                // Fallback: show URL as text
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    ctx.font = '12px Arial';
+                    ctx.fillText('QR generation failed', 10, 20);
+                    ctx.fillText('Use URL below', 10, 40);
                 }
-            } else {
-                console.log('QRious not available');
-                showStatus('QR library not available', 'error');
-                alert('QRious library not available'); // Debug alert
             }
         }
         
@@ -790,6 +839,77 @@
             alert('Test button works!');
             console.log('Test button clicked');
             showStatus('Test button clicked', 'info');
+            
+            // Test QR generation with a simple URL
+            const canvas = document.getElementById('qrcode');
+            if (canvas && typeof QRious !== 'undefined') {
+                try {
+                    const testQr = new QRious({
+                        element: canvas,
+                        value: 'https://example.com',
+                        size: 200,
+                        level: 'L'
+                    });
+                    qrSection.style.display = 'block';
+                    alert('Test QR code generated successfully!');
+                } catch (error) {
+                    alert('Test QR generation failed: ' + error.message);
+                }
+            } else {
+                alert('Canvas or QRious not available');
+            }
+        }
+        
+        // Alternative QR code generation using a different approach
+        function generateSimpleQR() {
+            console.log('Trying simple QR generation...');
+            
+            const section = chapterSelect.value || '1';
+            const page = verseSelect.value || '1';
+            const pdfName = `${section}_${page}.pdf`;
+            const baseUrl = window.location.origin + window.location.pathname;
+            const syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            
+            // Show the URL at least
+            if (syncUrlDiv) {
+                syncUrlDiv.textContent = syncUrl;
+            }
+            
+            if (qrSection) {
+                qrSection.style.display = 'block';
+            }
+            
+            // Try to use Google Charts API as fallback
+            const canvas = document.getElementById('qrcode');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = function() {
+                    canvas.width = 300;
+                    canvas.height = 300;
+                    ctx.drawImage(img, 0, 0, 300, 300);
+                    console.log('QR code generated using Google Charts API');
+                    showStatus('QR code generated successfully', 'success');
+                };
+                img.onerror = function() {
+                    console.error('Failed to load QR code from Google Charts API');
+                    // Draw a placeholder
+                    canvas.width = 300;
+                    canvas.height = 300;
+                    ctx.fillStyle = '#f0f0f0';
+                    ctx.fillRect(0, 0, 300, 300);
+                    ctx.fillStyle = '#000';
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('QR Code', 150, 140);
+                    ctx.fillText('Generation Failed', 150, 160);
+                    ctx.fillText('Use URL below', 150, 180);
+                };
+                
+                const encodedUrl = encodeURIComponent(syncUrl);
+                img.src = `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodedUrl}`;
+            }
         }
         
         function copyUrl() {
