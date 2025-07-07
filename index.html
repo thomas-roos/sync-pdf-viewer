@@ -447,21 +447,26 @@
         
         async function initializePresenter() {
             try {
+                console.log('Starting WebRTC initialization...');
                 updateConnectionInfo('Initializing real-time sync...', 'info');
                 
                 peerConnection = new RTCPeerConnection(rtcConfig);
+                console.log('RTCPeerConnection created');
                 
                 // Create data channel for sending PDF updates
                 dataChannel = peerConnection.createDataChannel('pdfSync', {
                     ordered: true
                 });
+                console.log('Data channel created');
                 
                 dataChannel.onopen = () => {
+                    console.log('Data channel opened');
                     updateConnectionInfo('Real-time sync ready - QR codes will include connection info', 'success');
                 };
                 
                 // Handle incoming viewer connections
                 peerConnection.ondatachannel = (event) => {
+                    console.log('Incoming data channel');
                     const channel = event.channel;
                     channel.onmessage = (event) => {
                         handleDataChannelMessage(JSON.parse(event.data));
@@ -470,6 +475,7 @@
                 
                 // Monitor connection changes
                 peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state changed:', peerConnection.connectionState);
                     updateViewerCount();
                     if (peerConnection.connectionState === 'connected') {
                         updateConnectionInfo('Viewer connected via QR code - real-time sync active', 'success');
@@ -478,16 +484,20 @@
                     }
                 };
                 
+                console.log('Creating offer...');
                 // Create offer for viewers to connect
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
+                console.log('Offer created and set');
                 
                 // Wait for ICE gathering to complete
+                console.log('Waiting for ICE gathering...');
                 await new Promise((resolve) => {
                     if (peerConnection.iceGatheringState === 'complete') {
                         resolve();
                     } else {
                         peerConnection.addEventListener('icegatheringstatechange', () => {
+                            console.log('ICE gathering state:', peerConnection.iceGatheringState);
                             if (peerConnection.iceGatheringState === 'complete') {
                                 resolve();
                             }
@@ -497,11 +507,16 @@
                 
                 // Store connection code for QR code inclusion
                 connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                console.log('Connection code generated, length:', connectionCode.length);
                 updateConnectionInfo('Real-time sync initialized - QR codes will auto-connect viewers', 'success');
                 
             } catch (error) {
+                console.error('WebRTC initialization failed:', error);
                 updateConnectionInfo('Failed to initialize real-time sync: ' + error.message, 'error');
-                console.error('WebRTC initialization error:', error);
+                
+                // Continue without WebRTC - don't let this break the app
+                connectionCode = '';
+                console.log('Continuing without WebRTC...');
             }
         }
         
@@ -575,12 +590,14 @@
         });
         
         // Initialize WebRTC on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('=== DOM Content Loaded ===');
             const urlParams = new URLSearchParams(window.location.search);
             const pdfFromUrl = urlParams.get('pdf');
             const rtcFromUrl = urlParams.get('rtc');
             
             if (pdfFromUrl) {
+                console.log('Loading as viewer with PDF:', pdfFromUrl);
                 currentPdfName = decodeURIComponent(pdfFromUrl);
                 
                 // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
@@ -600,9 +617,13 @@
                     updateConnectionInfo('Connecting via QR code...', 'info');
                     
                     // Connect to presenter using the RTC data from QR code
-                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl));
-                    
-                    showStatus(`Connected via QR code: Section ${section}, Page ${page}`, 'success');
+                    try {
+                        await connectToPresenterFromQR(decodeURIComponent(rtcFromUrl));
+                        showStatus(`Connected via QR code: Section ${section}, Page ${page}`, 'success');
+                    } catch (error) {
+                        console.error('Failed to connect via QR code:', error);
+                        showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
+                    }
                 } else {
                     showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
                 }
@@ -613,7 +634,14 @@
                 }, 1000);
             } else {
                 // This is a presenter - initialize WebRTC
-                initializePresenter();
+                console.log('Initializing as presenter...');
+                try {
+                    await initializePresenter();
+                    console.log('WebRTC initialization completed');
+                } catch (error) {
+                    console.error('WebRTC initialization failed, continuing without it:', error);
+                }
+                
                 showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
                 
                 // Show the "no selection" fallback on presenter side
