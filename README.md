@@ -12,13 +12,7 @@
 ```
 your-repo/
 ├── index.html (the QR PDF sync app)
-├── mobile1/
-│   ├── 1_1.pdf
-│   ├── 1_2.pdf
-│   ├── 3_15.pdf
-│   ├── 14_20.pdf
-│   └── ... (all PDFs from 1_1 to 14_20)
-├── mobile2/
+├── example-pdfs/
 │   ├── 1_1.pdf
 │   ├── 1_2.pdf
 │   ├── 3_15.pdf
@@ -30,19 +24,19 @@ your-repo/
 ## Usage
 
 1. **Presenter device**: Open the GitHub Pages URL
-2. **Select chapter (1-14) and verse (1-20)** using the dropdown menus
+2. **Select section (1-14) and page (1-20)** using the dropdown menus
 3. **Generate QR code**
 4. **Viewer devices**: Scan QR code
-5. **Select local folder** on each device (mobile1, mobile2, etc.)
-6. **PDF loads automatically** - each device loads the same numbered PDF from their local folder
+5. **Enter local folder name** on each device (e.g., "pdfs", "documents", "my-folder")
+6. **PDF loads automatically** - each device loads the same numbered PDF from their specified folder
 
 ## Example
-- Presenter selects: Chapter 3, Verse 15
+- Presenter selects: Section 3, Page 15
 - QR code is generated
 - Viewers scan QR code
-- Device 1 loads: `mobile1/3_15.pdf`
-- Device 2 loads: `mobile2/3_15.pdf`
-- All devices show the same content!
+- Viewer 1 enters folder: "pdfs" → loads: `pdfs/3_15.pdf`
+- Viewer 2 enters folder: "documents" → loads: `documents/3_15.pdf`
+- All devices show the same content from their own folders!
 
 ## Benefits
 
@@ -52,3 +46,4 @@ your-repo/
 - ✅ HTTPS enabled by default
 - ✅ Global CDN for fast loading
 - ✅ Perfect for presentations and meetings
+- ✅ Flexible folder structure - users choose their own folder names
