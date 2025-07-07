@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        select, input, button { padding: 8px; margin: 5px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        #qrcode { border: 1px solid #ddd; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>QR Code Generation Test</h1>
+        
+        <div>
+            <label for="chapterSelect">Section:</label>
+            <select id="chapterSelect">
+                <option value="">-- Select --</option>
+                <option value="1">Section 1</option>
+                <option value="2">Section 2</option>
+                <option value="3">Section 3</option>
+            </select>
+        </div>
+        
+        <div>
+            <label for="verseSelect">Page:</label>
+            <select id="verseSelect">
+                <option value="">-- Select --</option>
+                <option value="1">Page 1</option>
+                <option value="2">Page 2</option>
+                <option value="3">Page 3</option>
+            </select>
+        </div>
+        
+        <button onclick="testQRGeneration()">Generate QR Code</button>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div>
+            <h3>QR Code:</h3>
+            <canvas id="qrcode"></canvas>
+        </div>
+        
+        <div>
+            <h3>URL:</h3>
+            <div id="syncUrl" style="background: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace;"></div>
+        </div>
+    </div>
+    
+    <script>
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+        
+        function testQRGeneration() {
+            console.log('testQRGeneration called');
+            
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            
+            console.log('Section:', section, 'Page:', page);
+            
+            if (!section || !page) {
+                showStatus('Please select both section and page', 'error');
+                return;
+            }
+            
+            const pdfName = `${section}_${page}.pdf`;
+            const baseUrl = window.location.origin + window.location.pathname;
+            const syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            
+            console.log('Generated URL:', syncUrl);
+            document.getElementById('syncUrl').textContent = syncUrl;
+            
+            // Check if QRCode library is loaded
+            console.log('QRCode available:', typeof QRCode !== 'undefined');
+            
+            if (typeof QRCode !== 'undefined') {
+                const canvas = document.getElementById('qrcode');
+                console.log('Canvas element:', canvas);
+                
+                showStatus('Generating QR code...', 'info');
+                
+                QRCode.toCanvas(canvas, syncUrl, {
+                    width: 256,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                }, function(error) {
+                    if (error) {
+                        console.error('QR Code generation error:', error);
+                        showStatus('QR code generation failed: ' + error.message, 'error');
+                    } else {
+                        console.log('QR code generated successfully');
+                        showStatus(`QR code generated for ${pdfName}`, 'success');
+                    }
+                });
+            } else {
+                showStatus('QR code library not loaded', 'error');
+            }
+        }
+        
+        // Test on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded');
+            console.log('QRCode library available:', typeof QRCode !== 'undefined');
+            showStatus('Select section and page, then click Generate QR Code', 'info');
+        });
+    </script>
+</body>
+</html>

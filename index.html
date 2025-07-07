@@ -1001,16 +1001,23 @@
         }
         
         function generateSyncUrl() {
+            console.log('generateSyncUrl called');
+            
             const section = document.getElementById('chapterSelect').value;
             const page = document.getElementById('verseSelect').value;
             
+            console.log('Section:', section, 'Page:', page);
+            
             if (!section || !page) {
                 showStatus('Please select both section and page', 'error');
+                console.log('Missing section or page');
                 return;
             }
             
             const pdfName = `${section}_${page}.pdf`;
             currentPdfName = pdfName;
+            
+            console.log('PDF name:', pdfName);
             
             // Create sync URL with current page + PDF parameter
             const baseUrl = window.location.origin + window.location.pathname;
@@ -1019,24 +1026,61 @@
             // Always add WebRTC connection data
             if (connectionCode) {
                 syncUrl += `&rtc=${encodeURIComponent(connectionCode)}`;
+                console.log('Added WebRTC connection code');
+            } else {
+                console.log('No WebRTC connection code available');
             }
             
+            console.log('Generated URL:', syncUrl);
+            
             // Display URL
-            document.getElementById('syncUrl').textContent = syncUrl;
-            document.getElementById('fallbackUrl').textContent = syncUrl;
+            const syncUrlElement = document.getElementById('syncUrl');
+            const fallbackUrlElement = document.getElementById('fallbackUrl');
+            
+            if (syncUrlElement) {
+                syncUrlElement.textContent = syncUrl;
+                console.log('Set syncUrl element');
+            } else {
+                console.error('syncUrl element not found');
+            }
+            
+            if (fallbackUrlElement) {
+                fallbackUrlElement.textContent = syncUrl;
+                console.log('Set fallbackUrl element');
+            } else {
+                console.log('fallbackUrl element not found (this is OK)');
+            }
             
             // Show the section first
-            document.getElementById('qrSection').style.display = 'block';
+            const qrSection = document.getElementById('qrSection');
+            if (qrSection) {
+                qrSection.style.display = 'block';
+                console.log('Showed QR section');
+            } else {
+                console.error('qrSection element not found');
+                return;
+            }
             
             // Try to generate QR code
+            console.log('QRCode library available:', typeof QRCode !== 'undefined');
+            
             if (typeof QRCode !== 'undefined') {
                 const canvas = document.getElementById('qrcode');
+                
+                if (!canvas) {
+                    console.error('QR code canvas not found');
+                    showStatus('QR code canvas not found', 'error');
+                    return;
+                }
+                
+                console.log('Canvas element found:', canvas);
                 
                 // Clear any existing QR code
                 const context = canvas.getContext('2d');
                 context.clearRect(0, 0, canvas.width, canvas.height);
                 
                 showStatus('Generating QR code...', 'info');
+                console.log('Starting QR code generation...');
                 
                 QRCode.toCanvas(canvas, syncUrl, {
                     width: 256,
@@ -1051,6 +1095,7 @@
                         showQRFallback();
                         showStatus('QR code generation failed, showing URL instead', 'error');
                     } else {
+                        console.log('QR code generated successfully');
                         document.getElementById('qrcode').style.display = 'block';
                         document.getElementById('qrFallback').style.display = 'none';
                         showStatus(`QR code generated with real-time sync for Section ${section}, Page ${page}`, 'success');
@@ -1058,6 +1103,7 @@
                 });
             } else {
                 // QR library not available, show fallback
+                console.log('QR library not available, showing fallback');
                 showQRFallback();
                 showStatus('QR code library not available, showing URL instead', 'info');
             }
