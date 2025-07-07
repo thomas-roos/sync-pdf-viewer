@@ -77,7 +77,7 @@
             <input type="text" id="selectedPdf" readonly style="background: #f8f9fa; font-weight: bold;" placeholder="Section_Page">
         </div>
         
-        <button id="generateBtn" onclick="generateSyncUrl()" disabled>Generate QR Code</button>
+        <button id="generateBtn" onclick="generateSyncUrl()">Generate QR Code</button>
         <button onclick="debugEnableButton()">Debug: Enable Button</button>
         
         <!-- Navigation Controls for Presenter -->
@@ -169,7 +169,7 @@
                 const pdfName = `${section}_${page}`;
                 document.getElementById('selectedPdf').value = pdfName;
                 console.log('Setting button disabled to false');
-                generateBtn.disabled = false;
+                // Button is now always enabled
                 currentPdfName = `${pdfName}.pdf`;
                 
                 // Show navigation controls for presenter
@@ -188,12 +188,12 @@
                 }
             } else {
                 document.getElementById('selectedPdf').value = '';
-                generateBtn.disabled = true;
+                // Button is now always enabled
                 currentPdfName = '';
                 if (navigationControls) {
                     navigationControls.style.display = 'none';
                 }
-                console.log('Button disabled, no complete selection');
+                console.log('No selection, but button remains enabled');
                 showStatus('Please select both section and page', 'info');
             }
         }
@@ -559,7 +559,7 @@
             console.log('Section:', section, 'Page:', page);
             
             if (!section || !page) {
-                showStatus('Please select both section and page', 'error');
+                showStatus('Please select both section and page before generating QR code', 'error');
                 return;
             }
             
