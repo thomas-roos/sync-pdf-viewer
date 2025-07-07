@@ -143,6 +143,8 @@
         let isPresenter = true;
         let connectionCode = '';
         let connectedPeers = new Map();
+        let messageQueue = []; // Queue for messages when data channel isn't ready
+        let dataChannelReady = false; // Track data channel readiness
         
         // WebRTC configuration using free STUN servers
         const rtcConfig = {
@@ -199,6 +201,10 @@
             if (!isPresenter) return;
             
             updateConnectionStatus('Reconnecting', 'Attempting to reconnect WebRTC');
+            
+            // Reset connection state
+            dataChannelReady = false;
+            messageQueue = []; // Clear old messages
             
             // Close existing connection if any
             if (peerConnection) {
@@ -375,17 +381,23 @@
                 
                 dataChannel.onopen = () => {
                     console.log('Data channel opened');
+                    dataChannelReady = true;
                     updateConnectionStatus('Connected', 'Data channel opened');
                     showStatus('Real-time sync ready - QR codes will include connection info', 'success');
+                    
+                    // Process any queued messages
+                    processMessageQueue();
                 };
                 
                 dataChannel.onclose = () => {
                     console.log('Data channel closed');
+                    dataChannelReady = false;
                     updateConnectionStatus('Disconnected', 'Data channel closed');
                 };
                 
                 dataChannel.onerror = (error) => {
                     console.error('Data channel error:', error);
+                    dataChannelReady = false;
                     updateConnectionStatus('Error', `Data channel error: ${error.message || 'Unknown error'}`);
                 };
                 
@@ -558,6 +570,7 @@
                     dataChannel = event.channel;
                     
                     dataChannel.onopen = () => {
+                        dataChannelReady = true;
                         updateConnectionStatus('Connected', 'Data channel opened');
                         showStatus('Connected to presenter! PDFs will sync automatically.', 'success');
                         
@@ -574,11 +587,13 @@
                     };
                     
                     dataChannel.onclose = () => {
+                        dataChannelReady = false;
                         updateConnectionStatus('Disconnected', 'Data channel closed');
                         showStatus('Disconnected from presenter', 'error');
                     };
                     
                     dataChannel.onerror = (error) => {
+                        dataChannelReady = false;
                         updateConnectionStatus('Error', `Data channel error: ${error.message || 'Unknown error'}`);
                         console.error('Data channel error:', error);
                     };
@@ -669,7 +684,7 @@
         }
         
         function sendMessage(message) {
-            if (dataChannel && dataChannel.readyState === 'open') {
+            if (dataChannel && dataChannelReady && dataChannel.readyState === 'open') {
                 try {
                     console.log('Sending message via sendMessage:', message);
                     updateConnectionStatus('Active', `Sending message: ${message.type}`);
@@ -681,9 +696,39 @@
                     return false;
                 }
             } else {
-                console.warn('Data channel not ready, message not sent:', message);
-                updateConnectionStatus('Warning', `Data channel not ready (state: ${dataChannel ? dataChannel.readyState : 'null'})`);
+                console.warn('Data channel not ready, queueing message:', message);
+                updateConnectionStatus('Warning', `Data channel not ready, queueing message: ${message.type}`);
+                
+                // Queue the message for later
+                messageQueue.push(message);
+                
+                // Limit queue size to prevent memory issues
+                if (messageQueue.length > 10) {
+                    messageQueue.shift(); // Remove oldest message
+                }
+                
                 return false;
+            }
+        }
+        
+        function processMessageQueue() {
+            console.log('Processing message queue, length:', messageQueue.length);
+            
+            while (messageQueue.length > 0 && dataChannelReady && dataChannel.readyState === 'open') {
+                const message = messageQueue.shift();
+                try {
+                    console.log('Sending queued message:', message);
+                    updateConnectionStatus('Active', `Sending queued message: ${message.type}`);
+                    dataChannel.send(JSON.stringify(message));
+                } catch (error) {
+                    console.error('Error sending queued message:', error);
+                    updateConnectionStatus('Error', `Failed to send queued message: ${error.message || 'Unknown error'}`);
+                    break; // Stop processing if there's an error
+                }
+            }
+            
+            if (messageQueue.length === 0) {
+                updateConnectionStatus('Connected', 'All queued messages sent');
             }
         }
         
@@ -699,7 +744,19 @@
             };
             
             if (sendMessage(message)) {
+                updateConnectionStatus('Active', `PDF change broadcast successful`);
                 showStatus(`PDF synced to all connected viewers: Section ${section}, Page ${page}`, 'success');
+                return true;
+            } else {
+                // Message was queued or failed
+                if (messageQueue.length > 0) {
+                    updateConnectionStatus('Warning', `PDF change queued (${messageQueue.length} messages waiting)`);
+                    showStatus(`PDF change queued - will sync when viewer connects`, 'warning');
+                } else {
+                    updateConnectionStatus('Error', `PDF change broadcast failed`);
+                    showStatus(`Failed to sync PDF change`, 'error');
+                }
+                return false;
             }
         }
         
@@ -1033,6 +1090,14 @@
             const urlParams = new URLSearchParams(window.location.search);
             const pdfFromUrl = urlParams.get('pdf');
             const rtcFromUrl = urlParams.get('r') || urlParams.get('rtc'); // Support both short and long parameter names
+            
+            // Set up periodic message queue processing
+            setInterval(() => {
+                if (messageQueue.length > 0 && dataChannelReady && dataChannel && dataChannel.readyState === 'open') {
+                    console.log('Periodic queue check: processing messages');
+                    processMessageQueue();
+                }
+            }, 2000); // Check every 2 seconds
             
             if (pdfFromUrl) {
                 console.log('Loading as viewer with PDF:', pdfFromUrl);
