@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Button Test</title>
+</head>
+<body>
+    <h1>Simple Button Test</h1>
+    
+    <p>This tests if basic button clicks work:</p>
+    
+    <button onclick="test1()">Test 1: Alert</button>
+    <button onclick="test2()">Test 2: Console Log</button>
+    <button onclick="test3()">Test 3: Change Text</button>
+    
+    <div id="result">Click buttons to test</div>
+    
+    <hr>
+    
+    <h2>Simulate Main App</h2>
+    <select id="section">
+        <option value="">Select</option>
+        <option value="3">Section 3</option>
+    </select>
+    
+    <select id="page">
+        <option value="">Select</option>
+        <option value="15">Page 15</option>
+    </select>
+    
+    <button id="generateBtn" onclick="generateTest()" disabled>Generate QR</button>
+    <button onclick="enableButton()">Force Enable Button</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        function test1() {
+            alert('Test 1 works!');
+        }
+        
+        function test2() {
+            console.log('Test 2 works!');
+            document.getElementById('result').textContent = 'Test 2: Console logged';
+        }
+        
+        function test3() {
+            document.getElementById('result').textContent = 'Test 3: Text changed!';
+            document.getElementById('result').style.color = 'green';
+        }
+        
+        function enableButton() {
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = false;
+            btn.style.backgroundColor = 'green';
+            document.getElementById('status').textContent = 'Button force enabled';
+        }
+        
+        function generateTest() {
+            alert('Generate button clicked!');
+            console.log('Generate function called');
+            document.getElementById('status').textContent = 'Generate function executed!';
+            document.getElementById('status').style.color = 'green';
+        }
+        
+        // Test if JavaScript is working at all
+        console.log('JavaScript is working');
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded');
+            document.getElementById('result').textContent = 'JavaScript loaded successfully';
+        });
+    </script>
+</body>
+</html>

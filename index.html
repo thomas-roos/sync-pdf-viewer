@@ -1238,19 +1238,6 @@
             showStatus('Auto refresh enabled (30s intervals)', 'success');
         }
         
-        function showStatus(message, type) {
-            const statusDiv = document.getElementById('status');
-            statusDiv.textContent = message;
-            statusDiv.className = `status ${type}`;
-            statusDiv.style.display = 'block';
-            
-            if (type === 'success' || type === 'info') {
-                setTimeout(() => {
-                    statusDiv.style.display = 'none';
-                }, 5000);
-            }
-        }
-        
         // Auto-load PDF when local folder is selected
         document.getElementById('localFolder').addEventListener('input', function() {
             if (this.value && currentPdfName) {
