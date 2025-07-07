@@ -163,27 +163,28 @@
         <div class="instructions">
             <h3>How it works:</h3>
             <ol>
-                <li><strong>Presenter:</strong> Select section (1-14) and page (1-20), choose sync mode</li>
-                <li><strong>QR Code Mode:</strong> Generate QR codes for each PDF change (viewers scan each time)</li>
-                <li><strong>Real-time Mode:</strong> QR code includes connection info - viewers scan once, then auto-sync!</li>
+                <li><strong>Presenter:</strong> Select section (1-14) and page (1-20), generate QR code</li>
+                <li><strong>Viewers:</strong> Scan QR code once to connect and load current PDF</li>
+                <li><strong>Real-time sync:</strong> All future navigation syncs instantly across all devices</li>
                 <li><strong>All devices:</strong> Load corresponding PDF (e.g., 3_15.pdf) from their local folders</li>
             </ol>
             <p><strong>PDF Format:</strong> Files should be named like <code>1_1.pdf</code>, <code>3_15.pdf</code>, <code>14_20.pdf</code>, etc.</p>
             
             <details style="margin-top: 15px;">
-                <summary style="cursor: pointer; font-weight: bold;">🔄 Real-time Sync (Recommended)</summary>
+                <summary style="cursor: pointer; font-weight: bold;">🔄 Real-time Sync Process</summary>
                 <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
                     <p><strong>Presenter:</strong></p>
                     <ol>
-                        <li>Select "Real-time Sync" mode</li>
                         <li>Select section and page, generate QR code</li>
-                        <li>Navigate normally - all viewers sync instantly!</li>
+                        <li>Navigate with keyboard shortcuts or buttons</li>
+                        <li>All viewers sync instantly - no new QR codes needed!</li>
                     </ol>
                     <p><strong>Viewers:</strong></p>
                     <ol>
                         <li>Scan the QR code (auto-connects to real-time sync)</li>
                         <li>Enter local folder name</li>
-                        <li>PDFs load automatically as presenter navigates!</li>
+                        <li>Current PDF loads + real-time sync established</li>
+                        <li>All future PDFs load automatically as presenter navigates!</li>
                     </ol>
                     <p style="color: #007bff; font-weight: bold;">✨ One QR scan = Real-time sync forever!</p>
                 </div>
@@ -193,8 +194,8 @@
                 <summary style="cursor: pointer; font-weight: bold;">⌨️ Keyboard Shortcuts (Presenter)</summary>
                 <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
                     <ul style="margin: 0; padding-left: 20px;">
-                        <li><kbd>→</kbd> or <kbd>N</kbd> - Next PDF</li>
-                        <li><kbd>←</kbd> or <kbd>P</kbd> - Previous PDF</li>
+                        <li><kbd>→</kbd> or <kbd>N</kbd> - Next PDF (syncs to all viewers)</li>
+                        <li><kbd>←</kbd> or <kbd>P</kbd> - Previous PDF (syncs to all viewers)</li>
                         <li><kbd>Home</kbd> - Jump to start (1_1)</li>
                         <li><kbd>End</kbd> - Jump to end (14_20)</li>
                         <li><kbd>Ctrl+Enter</kbd> - Generate QR code</li>
@@ -207,27 +208,9 @@
         <div class="sync-section">
             <h3>Content Selection Control</h3>
             
-            <!-- Connection Mode Selection -->
-            <div style="margin-bottom: 15px; padding: 10px; background: #e9ecef; border-radius: 5px;">
-                <h4>Sync Mode:</h4>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <label style="display: flex; align-items: center; gap: 5px;">
-                        <input type="radio" name="connectionMode" value="qr" checked onchange="setConnectionMode('qr')">
-                        <span>QR Code Only</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 5px;">
-                        <input type="radio" name="connectionMode" value="webrtc" onchange="setConnectionMode('webrtc')">
-                        <span>Real-time Sync</span>
-                    </label>
-                </div>
-                <small style="color: #666; display: block; margin-top: 5px;">
-                    Real-time sync: Viewers scan QR code once, then auto-sync as you navigate
-                </small>
-            </div>
-            
             <!-- WebRTC Status Section -->
-            <div id="webrtcStatus" style="display: none; margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 5px; border: 2px solid #007bff;">
-                <h4>Real-time Connection Status</h4>
+            <div id="webrtcStatus" style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 5px; border: 2px solid #007bff;">
+                <h4>Real-time Sync Status</h4>
                 <div id="connectionInfo" style="padding: 10px; border-radius: 4px; margin: 10px 0;">
                     <span id="connectionText">Initializing real-time sync...</span>
                 </div>
@@ -306,12 +289,6 @@
                     <button onclick="jumpToStart()">Jump to Start (1_1)</button>
                     <button onclick="jumpToEnd()">Jump to End (14_20)</button>
                 </div>
-                <div style="margin-top: 10px;">
-                    <label>
-                        <input type="checkbox" id="autoSync" checked> Auto-sync on navigation
-                    </label>
-                    <small style="margin-left: 10px; color: #666;">Automatically generate QR code when navigating</small>
-                </div>
             </div>
             
             <div id="qrSection" style="display: none;">
@@ -370,8 +347,7 @@
         let autoRefreshInterval = null;
         
         // WebRTC variables
-        let connectionMode = 'qr';
-        let isPresenter = false;
+        let isPresenter = true; // Always presenter by default
         let peerConnection = null;
         let dataChannel = null;
         let connectedPeers = new Map();
@@ -444,19 +420,54 @@
             }
         });
         
-        function setConnectionMode(mode) {
-            connectionMode = mode;
-            const webrtcStatus = document.getElementById('webrtcStatus');
+        // Initialize WebRTC on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            const rtcFromUrl = urlParams.get('rtc');
             
-            if (mode === 'webrtc') {
-                webrtcStatus.style.display = 'block';
-                isPresenter = true; // Always presenter when enabling WebRTC
-                initializePresenter();
+            if (pdfFromUrl) {
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                
+                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
+                const pdfBase = currentPdfName.replace('.pdf', '');
+                const [section, page] = pdfBase.split('_');
+                
+                if (section && page) {
+                    document.getElementById('chapterSelect').value = section;
+                    document.getElementById('verseSelect').value = page;
+                    document.getElementById('selectedPdf').value = pdfBase;
+                }
+                
+                // Check if this is a WebRTC connection from QR code
+                if (rtcFromUrl) {
+                    // This is a viewer connecting via QR
+                    isPresenter = false;
+                    updateConnectionInfo('Connecting via QR code...', 'info');
+                    
+                    // Connect to presenter using the RTC data from QR code
+                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl));
+                    
+                    showStatus(`Connected via QR code: Section ${section}, Page ${page}`, 'success');
+                } else {
+                    showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
+                }
+                
+                // Auto-load if local folder is selected
+                setTimeout(() => {
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    } else {
+                        showStatus('Please enter your local folder name to load the PDF', 'info');
+                    }
+                }, 1000);
             } else {
-                webrtcStatus.style.display = 'none';
-                cleanupWebRTC();
+                // This is a presenter - initialize WebRTC
+                initializePresenter();
+                showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
             }
-        }
+        });
         
         async function initializePresenter() {
             try {
@@ -621,7 +632,7 @@
         }
         
         function broadcastPdfChange(section, page) {
-            if (connectionMode === 'webrtc' && isPresenter) {
+            if (isPresenter) {
                 const message = {
                     type: 'pdfSync',
                     section: parseInt(section),
@@ -633,7 +644,7 @@
                 if (sendMessage(message)) {
                     showStatus(`PDF synced to all connected viewers: Section ${section}, Page ${page}`, 'success');
                 } else {
-                    showStatus('No viewers connected for real-time sync', 'info');
+                    showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
                 }
             }
         }
@@ -735,11 +746,6 @@
             // Broadcast to WebRTC viewers
             broadcastPdfChange(section, page);
             
-            // Auto-sync QR code if enabled
-            if (document.getElementById('autoSync').checked) {
-                setTimeout(generateSyncUrl, 100);
-            }
-            
             showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
         }
         
@@ -770,11 +776,6 @@
             // Broadcast to WebRTC viewers
             broadcastPdfChange(section, page);
             
-            // Auto-sync QR code if enabled
-            if (document.getElementById('autoSync').checked) {
-                setTimeout(generateSyncUrl, 100);
-            }
-            
             showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
         }
         
@@ -786,10 +787,6 @@
             // Broadcast to WebRTC viewers
             broadcastPdfChange(1, 1);
             
-            if (document.getElementById('autoSync').checked) {
-                setTimeout(generateSyncUrl, 100);
-            }
-            
             showStatus('Jumped to start: Section 1, Page 1', 'info');
         }
         
@@ -800,10 +797,6 @@
             
             // Broadcast to WebRTC viewers
             broadcastPdfChange(14, 20);
-            
-            if (document.getElementById('autoSync').checked) {
-                setTimeout(generateSyncUrl, 100);
-            }
             
             showStatus('Jumped to end: Section 14, Page 20', 'info');
         }
@@ -824,8 +817,8 @@
             const baseUrl = window.location.origin + window.location.pathname;
             let syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
             
-            // Add WebRTC connection data if real-time mode is enabled
-            if (connectionMode === 'webrtc' && connectionCode) {
+            // Always add WebRTC connection data
+            if (connectionCode) {
                 syncUrl += `&rtc=${encodeURIComponent(connectionCode)}`;
             }
             
@@ -861,12 +854,7 @@
                     } else {
                         document.getElementById('qrcode').style.display = 'block';
                         document.getElementById('qrFallback').style.display = 'none';
-                        
-                        if (connectionMode === 'webrtc') {
-                            showStatus(`QR code generated with real-time sync for Section ${section}, Page ${page}`, 'success');
-                        } else {
-                            showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
-                        }
+                        showStatus(`QR code generated with real-time sync for Section ${section}, Page ${page}`, 'success');
                     }
                 });
             } else {
