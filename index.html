@@ -691,6 +691,36 @@
             console.log('=== DOM Content Loaded ===');
             console.log('QRious available:', typeof QRious !== 'undefined');
             
+            // Add direct event listeners to dropdowns
+            const chapterSelect = document.getElementById('chapterSelect');
+            const verseSelect = document.getElementById('verseSelect');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            if (chapterSelect) {
+                chapterSelect.addEventListener('change', updatePdfSelection);
+                console.log('Added change listener to chapter select');
+            }
+            
+            if (verseSelect) {
+                verseSelect.addEventListener('change', updatePdfSelection);
+                console.log('Added change listener to verse select');
+            }
+            
+            // Check initial values
+            setTimeout(function() {
+                if (chapterSelect && verseSelect && generateBtn) {
+                    const section = chapterSelect.value;
+                    const page = verseSelect.value;
+                    console.log('Initial values - Section:', section, 'Page:', page);
+                    
+                    if (section && page) {
+                        console.log('Both section and page are selected, enabling button');
+                        generateBtn.disabled = false;
+                        document.getElementById('selectedPdf').value = `${section}_${page}`;
+                    }
+                }
+            }, 500);
+            
             const urlParams = new URLSearchParams(window.location.search);
             const pdfFromUrl = urlParams.get('pdf');
             const rtcFromUrl = urlParams.get('r') || urlParams.get('rtc'); // Support both short and long parameter names
