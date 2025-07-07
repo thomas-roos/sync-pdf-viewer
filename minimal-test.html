@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Test</title>
+</head>
+<body>
+    <h1>Minimal JavaScript Test</h1>
+    
+    <button onclick="alert('Button 1 works!')">Test Button 1</button>
+    <button onclick="testFunction()">Test Button 2</button>
+    <button id="testBtn3">Test Button 3</button>
+    
+    <div id="output"></div>
+    
+    <script>
+        console.log('Script loaded');
+        
+        function testFunction() {
+            alert('Test function works!');
+            document.getElementById('output').innerHTML = 'Test function executed';
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded');
+            
+            const btn3 = document.getElementById('testBtn3');
+            if (btn3) {
+                btn3.addEventListener('click', function() {
+                    alert('Event listener works!');
+                    document.getElementById('output').innerHTML = 'Event listener executed';
+                });
+                console.log('Event listener added');
+            } else {
+                console.error('Button 3 not found');
+            }
+        });
+        
+        // Test if there are any JavaScript errors
+        window.onerror = function(msg, url, line, col, error) {
+            console.error('JavaScript Error:', msg, 'at', url, ':', line);
+            alert('JavaScript Error: ' + msg);
+            return false;
+        };
+    </script>
+</body>
+</html>
