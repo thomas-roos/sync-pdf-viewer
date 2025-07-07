@@ -78,6 +78,23 @@
         
         <button id="generateBtn" onclick="generateSyncUrl()" disabled>Generate QR Code</button>
         
+        <!-- Navigation Controls for Presenter -->
+        <div id="navigationControls" style="display: none; margin-top: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa;">
+            <h4>Navigation Controls:</h4>
+            <div style="margin-bottom: 10px;">
+                <button onclick="previousPdf()">← Previous</button>
+                <button onclick="nextPdf()">Next →</button>
+                <button onclick="jumpToStart()">Jump to Start</button>
+                <button onclick="jumpToEnd()">Jump to End</button>
+            </div>
+            <div style="font-size: 14px; color: #666;">
+                <strong>Keyboard Shortcuts:</strong> ← → (navigate), Home (start), End (end), Ctrl+Enter (generate QR)
+            </div>
+            <div style="margin-top: 10px;">
+                <strong>Current Position:</strong> <span id="currentPosition">Section -, Page -</span>
+            </div>
+        </div>
+        
         <div id="status" class="status" style="display: none;"></div>
         
         <div id="qrSection">
@@ -90,6 +107,23 @@
     </div>
     
     <script>
+        // WebRTC variables
+        let peerConnection = null;
+        let dataChannel = null;
+        let isPresenter = true;
+        let connectionCode = '';
+        let connectedPeers = new Map();
+        
+        // WebRTC configuration using free STUN servers
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.services.mozilla.com' }
+            ]
+        };
+        
         let currentPdfName = '';
         
         function showStatus(message, type) {
@@ -111,6 +145,7 @@
             const section = document.getElementById('chapterSelect').value;
             const page = document.getElementById('verseSelect').value;
             const generateBtn = document.getElementById('generateBtn');
+            const navigationControls = document.getElementById('navigationControls');
             
             console.log('Section:', section, 'Page:', page);
             
@@ -119,14 +154,305 @@
                 document.getElementById('selectedPdf').value = pdfName;
                 generateBtn.disabled = false;
                 currentPdfName = `${pdfName}.pdf`;
+                
+                // Show navigation controls for presenter
+                if (isPresenter && navigationControls) {
+                    navigationControls.style.display = 'block';
+                    updateNavigationButtons();
+                    updateCurrentPosition();
+                }
+                
                 console.log('Button enabled, PDF name set to:', currentPdfName);
                 showStatus(`Selected: Section ${section}, Page ${page}`, 'success');
+                
+                // Broadcast to connected viewers if this is a presenter
+                if (isPresenter) {
+                    broadcastPdfChange(parseInt(section), parseInt(page));
+                }
             } else {
                 document.getElementById('selectedPdf').value = '';
                 generateBtn.disabled = true;
                 currentPdfName = '';
+                if (navigationControls) {
+                    navigationControls.style.display = 'none';
+                }
                 console.log('Button disabled, no complete selection');
                 showStatus('Please select both section and page', 'info');
+            }
+        }
+        
+        function updateNavigationButtons() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            const prevBtn = document.querySelector('button[onclick="previousPdf()"]');
+            const nextBtn = document.querySelector('button[onclick="nextPdf()"]');
+            
+            if (prevBtn && nextBtn) {
+                // Disable previous if at start (1_1)
+                prevBtn.disabled = (section === 1 && page === 1);
+                
+                // Disable next if at end (14_20)
+                nextBtn.disabled = (section === 14 && page === 20);
+            }
+        }
+        
+        function updateCurrentPosition() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const positionSpan = document.getElementById('currentPosition');
+            
+            if (positionSpan) {
+                if (section && page) {
+                    positionSpan.textContent = `Section ${section}, Page ${page}`;
+                } else {
+                    positionSpan.textContent = 'Section -, Page -';
+                }
+            }
+        }
+        
+        function previousPdf() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            
+            if (!section || !page) return;
+            
+            let newSection = section;
+            let newPage = page;
+            
+            if (page > 1) {
+                newPage = page - 1;
+            } else if (section > 1) {
+                newSection = section - 1;
+                newPage = 20;
+            } else {
+                return; // Already at start
+            }
+            
+            // Update dropdowns
+            document.getElementById('chapterSelect').value = newSection.toString();
+            document.getElementById('verseSelect').value = newPage.toString();
+            
+            // Update PDF selection
+            updatePdfSelection();
+            
+            showStatus(`Navigated to Section ${newSection}, Page ${newPage}`, 'info');
+        }
+        
+        function nextPdf() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            
+            if (!section || !page) return;
+            
+            let newSection = section;
+            let newPage = page;
+            
+            if (page < 20) {
+                newPage = page + 1;
+            } else if (section < 14) {
+                newSection = section + 1;
+                newPage = 1;
+            } else {
+                return; // Already at end
+            }
+            
+            // Update dropdowns
+            document.getElementById('chapterSelect').value = newSection.toString();
+            document.getElementById('verseSelect').value = newPage.toString();
+            
+            // Update PDF selection
+            updatePdfSelection();
+            
+            showStatus(`Navigated to Section ${newSection}, Page ${newPage}`, 'info');
+        }
+        
+        function jumpToStart() {
+            document.getElementById('chapterSelect').value = '1';
+            document.getElementById('verseSelect').value = '1';
+            updatePdfSelection();
+            
+            showStatus('Jumped to start: Section 1, Page 1', 'info');
+        }
+        
+        function jumpToEnd() {
+            document.getElementById('chapterSelect').value = '14';
+            document.getElementById('verseSelect').value = '20';
+            updatePdfSelection();
+            
+            showStatus('Jumped to end: Section 14, Page 20', 'info');
+        }
+        
+        // WebRTC Functions
+        async function initializePresenter() {
+            try {
+                console.log('Starting WebRTC initialization...');
+                showStatus('Initializing real-time sync...', 'info');
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                console.log('RTCPeerConnection created');
+                
+                // Create data channel for sending PDF updates
+                dataChannel = peerConnection.createDataChannel('pdfSync', {
+                    ordered: true
+                });
+                console.log('Data channel created');
+                
+                dataChannel.onopen = () => {
+                    console.log('Data channel opened');
+                    showStatus('Real-time sync ready - QR codes will include connection info', 'success');
+                };
+                
+                // Handle incoming viewer connections
+                peerConnection.ondatachannel = (event) => {
+                    console.log('Incoming data channel');
+                    const channel = event.channel;
+                    channel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                };
+                
+                // Monitor connection changes
+                peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state changed:', peerConnection.connectionState);
+                    if (peerConnection.connectionState === 'connected') {
+                        showStatus('Viewer connected via QR code - real-time sync active', 'success');
+                    } else if (peerConnection.connectionState === 'disconnected') {
+                        showStatus('Viewer disconnected - QR codes will work normally', 'info');
+                    }
+                };
+                
+                console.log('Creating offer...');
+                // Create offer for viewers to connect
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                console.log('Offer created and set');
+                
+                // Wait for ICE gathering to complete
+                console.log('Waiting for ICE gathering...');
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            console.log('ICE gathering state:', peerConnection.iceGatheringState);
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                // Store connection code for QR code inclusion
+                connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                console.log('Connection code generated, length:', connectionCode.length);
+                showStatus('Real-time sync initialized - QR codes will auto-connect viewers', 'success');
+                
+            } catch (error) {
+                console.error('WebRTC initialization failed:', error);
+                showStatus('Failed to initialize real-time sync: ' + error.message, 'error');
+                
+                // Continue without WebRTC - don't let this break the app
+                connectionCode = '';
+                console.log('Continuing without WebRTC...');
+            }
+        }
+        
+        async function connectToPresenterFromQR(connectionData) {
+            try {
+                console.log('Connecting to presenter via QR...');
+                showStatus('Connecting to presenter...', 'info');
+                
+                const offer = JSON.parse(atob(connectionData));
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Handle data channel from presenter
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    
+                    dataChannel.onopen = () => {
+                        showStatus('Connected to presenter! PDFs will sync automatically.', 'success');
+                        
+                        // Send viewer info to presenter
+                        sendMessage({
+                            type: 'viewerConnected',
+                            deviceName: 'Viewer-' + Math.random().toString(36).substr(2, 3),
+                            timestamp: new Date().toISOString()
+                        });
+                    };
+                    
+                    dataChannel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                    
+                    dataChannel.onclose = () => {
+                        showStatus('Disconnected from presenter', 'error');
+                    };
+                };
+                
+                await peerConnection.setRemoteDescription(offer);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Wait for ICE gathering
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+            } catch (error) {
+                showStatus('Failed to connect: ' + error.message, 'error');
+                console.error('WebRTC connection error:', error);
+            }
+        }
+        
+        function handleDataChannelMessage(data) {
+            console.log('Received message:', data);
+            
+            switch (data.type) {
+                case 'pdfChange':
+                    // Update dropdowns to match presenter
+                    document.getElementById('chapterSelect').value = data.section.toString();
+                    document.getElementById('verseSelect').value = data.page.toString();
+                    document.getElementById('selectedPdf').value = `${data.section}_${data.page}`;
+                    currentPdfName = `${data.section}_${data.page}.pdf`;
+                    
+                    showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
+                    break;
+                    
+                case 'viewerConnected':
+                    if (isPresenter) {
+                        showStatus(`Viewer connected: ${data.deviceName}`, 'success');
+                    }
+                    break;
+            }
+        }
+        
+        function sendMessage(message) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(message));
+                return true;
+            }
+            return false;
+        }
+        
+        function broadcastPdfChange(section, page) {
+            const message = {
+                type: 'pdfChange',
+                section: section,
+                page: page,
+                timestamp: new Date().toISOString()
+            };
+            
+            if (sendMessage(message)) {
+                showStatus(`PDF synced to all connected viewers: Section ${section}, Page ${page}`, 'success');
             }
         }
         
@@ -146,9 +472,15 @@
             const pdfName = `${section}_${page}.pdf`;
             currentPdfName = pdfName;
             
-            // Create sync URL
+            // Create sync URL with WebRTC connection data
             const baseUrl = window.location.origin + window.location.pathname;
             let syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            
+            // Add WebRTC connection data if available
+            if (connectionCode) {
+                syncUrl += `&rtc=${encodeURIComponent(connectionCode)}`;
+                console.log('Added WebRTC connection code to QR');
+            }
             
             console.log('Generated URL:', syncUrl);
             
@@ -193,7 +525,11 @@
                     
                     console.log('QR code generated successfully');
                     canvas.style.display = 'block';
-                    showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
+                    
+                    const statusMsg = connectionCode ? 
+                        `QR code generated with real-time sync for Section ${section}, Page ${page}` :
+                        `QR code generated for Section ${section}, Page ${page} (basic sync)`;
+                    showStatus(statusMsg, 'success');
                     
                 } catch (error) {
                     console.error('QR generation error:', error);
@@ -214,11 +550,88 @@
             });
         }
         
-        // Test on page load
+        // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('=== Working Version Loaded ===');
+            console.log('=== DOM Content Loaded ===');
             console.log('QRious available:', typeof QRious !== 'undefined');
-            showStatus('Select section and page, then click Generate QR Code', 'info');
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            const rtcFromUrl = urlParams.get('rtc');
+            
+            if (pdfFromUrl) {
+                console.log('Loading as viewer with PDF:', pdfFromUrl);
+                isPresenter = false;
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                
+                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
+                const pdfBase = currentPdfName.replace('.pdf', '');
+                const [section, page] = pdfBase.split('_');
+                
+                if (section && page) {
+                    document.getElementById('chapterSelect').value = section;
+                    document.getElementById('verseSelect').value = page;
+                    document.getElementById('selectedPdf').value = pdfBase;
+                }
+                
+                // Check if this is a WebRTC connection from QR code
+                if (rtcFromUrl) {
+                    // This is a viewer connecting via QR with real-time sync
+                    showStatus('Connecting via QR code for real-time sync...', 'info');
+                    
+                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl)).then(() => {
+                        showStatus(`Connected with real-time sync: Section ${section}, Page ${page}`, 'success');
+                    }).catch((error) => {
+                        console.error('Failed to connect via QR code:', error);
+                        showStatus(`PDF loaded: Section ${section}, Page ${page} (no real-time sync)`, 'success');
+                    });
+                } else {
+                    showStatus(`PDF loaded: Section ${section}, Page ${page}`, 'success');
+                }
+            } else {
+                // This is a presenter - initialize WebRTC
+                console.log('Initializing as presenter...');
+                isPresenter = true;
+                
+                initializePresenter().then(() => {
+                    console.log('WebRTC initialization completed');
+                }).catch((error) => {
+                    console.error('WebRTC initialization failed, continuing without it:', error);
+                });
+                
+                showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
+            }
+            
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function(event) {
+                // Only handle keyboard shortcuts if we're a presenter
+                if (!isPresenter) return;
+                
+                console.log('Key pressed:', event.key);
+                
+                switch (event.key) {
+                    case 'ArrowLeft':
+                        previousPdf();
+                        break;
+                    case 'ArrowRight':
+                        nextPdf();
+                        break;
+                    case 'Home':
+                        jumpToStart();
+                        break;
+                    case 'End':
+                        jumpToEnd();
+                        break;
+                    case 'Enter':
+                        if (event.ctrlKey) {
+                            const generateBtn = document.getElementById('generateBtn');
+                            if (!generateBtn.disabled) {
+                                generateSyncUrl();
+                            }
+                        }
+                        break;
+                }
+            });
         });
     </script>
 </body>
