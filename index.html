@@ -453,14 +453,9 @@
                     showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
                 }
                 
-                // Auto-load if local folder is selected
+                // Always try to load/display - loadCurrentPDF handles the fallback
                 setTimeout(() => {
-                    const localFolder = document.getElementById('localFolder').value;
-                    if (localFolder) {
-                        loadCurrentPDF();
-                    } else {
-                        showStatus('Please enter your local folder name to load the PDF', 'info');
-                    }
+                    loadCurrentPDF();
                 }, 1000);
             } else {
                 // This is a presenter - initialize WebRTC
@@ -605,13 +600,8 @@
                     
                     showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
                     
-                    // Auto-load if local folder is set
-                    const localFolder = document.getElementById('localFolder').value;
-                    if (localFolder) {
-                        loadCurrentPDF();
-                    } else {
-                        showStatus('Please enter your local folder name to load the PDF', 'info');
-                    }
+                    // Always try to load/display - loadCurrentPDF handles the fallback
+                    loadCurrentPDF();
                     break;
                     
                 case 'viewerConnected':
@@ -893,24 +883,47 @@
             const localFolder = document.getElementById('localFolder').value;
             const pdfName = currentPdfName;
             
-            if (!localFolder) {
-                showStatus('Please select a local folder', 'error');
+            if (!pdfName) {
+                showStatus('No PDF selected', 'error');
                 return;
             }
             
-            if (!pdfName) {
-                showStatus('No PDF selected', 'error');
+            // Extract section and page for display
+            const pdfBase = pdfName.replace('.pdf', '');
+            const [section, page] = pdfBase.split('_');
+            
+            if (!localFolder) {
+                // Fallback: Show PDF info without trying to load
+                const pdfViewer = document.getElementById('pdfViewer');
+                const fallbackHTML = `
+                    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: #f8f9fa; border: 2px dashed #007bff; text-align: center; padding: 20px;">
+                        <h2 style="color: #007bff; margin-bottom: 20px;">📄 PDF Sync Active</h2>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                            <h3 style="margin: 0 0 10px 0; color: #333;">Current Selection:</h3>
+                            <div style="font-size: 24px; font-weight: bold; color: #007bff;">Section ${section}, Page ${page}</div>
+                            <div style="font-size: 18px; color: #666; margin-top: 10px;">PDF: ${pdfName}</div>
+                        </div>
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 5px; border: 1px solid #ffeaa7; max-width: 400px;">
+                            <p style="margin: 0; color: #856404;">
+                                <strong>To load PDFs:</strong><br>
+                                Enter your local folder name above<br>
+                                (e.g., "pdfs", "documents", "my-folder")
+                            </p>
+                        </div>
+                    </div>
+                `;
+                pdfViewer.srcdoc = fallbackHTML;
+                showStatus(`Synced to Section ${section}, Page ${page} - Enter folder name to load PDF`, 'info');
                 return;
             }
             
             const pdfPath = `${localFolder}/${pdfName}`;
             const pdfViewer = document.getElementById('pdfViewer');
             
-            // Extract section and page for display
-            const pdfBase = pdfName.replace('.pdf', '');
-            const [section, page] = pdfBase.split('_');
-            
             showStatus(`Loading Section ${section}, Page ${page} from ${localFolder}...`, 'info');
+            
+            // Clear any fallback content
+            pdfViewer.srcdoc = '';
             
             pdfViewer.onload = function() {
                 showStatus(`Successfully loaded: Section ${section}, Page ${page}`, 'success');
@@ -918,6 +931,26 @@
             
             pdfViewer.onerror = function() {
                 showStatus(`Error loading: ${pdfPath}`, 'error');
+                
+                // Show error fallback
+                const errorHTML = `
+                    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: #f8f9fa; border: 2px dashed #dc3545; text-align: center; padding: 20px;">
+                        <h2 style="color: #dc3545; margin-bottom: 20px;">❌ PDF Not Found</h2>
+                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                            <h3 style="margin: 0 0 10px 0; color: #333;">Looking for:</h3>
+                            <div style="font-size: 18px; color: #dc3545; font-family: monospace;">${pdfPath}</div>
+                        </div>
+                        <div style="background: #f8d7da; padding: 15px; border-radius: 5px; border: 1px solid #f5c6cb; max-width: 400px;">
+                            <p style="margin: 0; color: #721c24;">
+                                <strong>Check:</strong><br>
+                                • Folder name is correct<br>
+                                • PDF file exists: ${pdfName}<br>
+                                • File path: ${pdfPath}
+                            </p>
+                        </div>
+                    </div>
+                `;
+                pdfViewer.srcdoc = errorHTML;
             };
             
             pdfViewer.src = pdfPath;
@@ -965,7 +998,7 @@
         }
         
         // Auto-load PDF when local folder is selected
-        document.getElementById('localFolder').addEventListener('change', function() {
+        document.getElementById('localFolder').addEventListener('input', function() {
             if (this.value && currentPdfName) {
                 loadCurrentPDF();
             }
