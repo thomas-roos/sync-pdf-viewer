@@ -98,6 +98,19 @@
         
         <div id="status" class="status" style="display: none;"></div>
         
+        <!-- Viewer Section (for PDF display) -->
+        <div id="viewerSection" style="margin-top: 20px;">
+            <div id="folderInputSection" style="margin-bottom: 15px;">
+                <label for="localFolder">Local PDF Folder Path:</label>
+                <input type="text" id="localFolder" placeholder="Enter folder path (e.g., 'pdfs', 'documents')">
+                <button onclick="updateLocalFolder()">Set Folder</button>
+            </div>
+            
+            <div id="pdfViewerContainer" style="width: 100%; height: 600px; border: 1px solid #ddd;">
+                <iframe id="pdfViewer" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+        
         <div id="qrSection">
             <h3>QR Code:</h3>
             <canvas id="qrcode"></canvas>
@@ -486,7 +499,20 @@
                     // Update UI and load PDF if folder is set
                     const localFolder = document.getElementById('localFolder')?.value;
                     if (localFolder) {
-                        loadCurrentPDF();
+                        // Try to load the PDF directly
+                        const pdfPath = `${localFolder}/${currentPdfName}`;
+                        console.log('Loading PDF:', pdfPath);
+                        
+                        // Create iframe with PDF
+                        const pdfViewer = document.getElementById('pdfViewer');
+                        if (pdfViewer) {
+                            pdfViewer.src = pdfPath;
+                            console.log('PDF viewer updated with new path');
+                        } else {
+                            console.error('PDF viewer element not found');
+                        }
+                    } else {
+                        console.log('Local folder not set, cannot load PDF');
                     }
                     
                     showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
@@ -618,6 +644,33 @@
             });
         }
         
+        function updateLocalFolder() {
+            const localFolder = document.getElementById('localFolder').value;
+            if (localFolder) {
+                showStatus(`Local folder set to: ${localFolder}`, 'success');
+                
+                // Try to load the current PDF if selected
+                if (currentPdfName) {
+                    // Create PDF path
+                    const pdfPath = `${localFolder}/${currentPdfName}`;
+                    console.log('Loading PDF:', pdfPath);
+                    
+                    // Create iframe with PDF
+                    const pdfViewer = document.getElementById('pdfViewer');
+                    if (pdfViewer) {
+                        pdfViewer.src = pdfPath;
+                        console.log('PDF viewer updated with new path');
+                    } else {
+                        console.error('PDF viewer element not found');
+                    }
+                } else {
+                    console.log('No PDF selected yet');
+                }
+            } else {
+                showStatus('Please enter a local folder path', 'error');
+            }
+        }
+        
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             console.log('=== DOM Content Loaded ===');
@@ -649,13 +702,26 @@
                     
                     connectToPresenterFromQR(decodeURIComponent(rtcFromUrl)).then(() => {
                         showStatus(`Connected with real-time sync: Section ${section}, Page ${page}`, 'success');
+                        
+                        // Focus on the local folder input to prompt the user
+                        const localFolderInput = document.getElementById('localFolder');
+                        if (localFolderInput) {
+                            localFolderInput.focus();
+                            localFolderInput.scrollIntoView({ behavior: 'smooth' });
+                        }
                     }).catch((error) => {
                         console.error('Failed to connect via QR code:', error);
                         showStatus(`PDF loaded: Section ${section}, Page ${page} (no real-time sync)`, 'success');
                     });
                 } else {
                     showStatus(`PDF loaded: Section ${section}, Page ${page}`, 'success');
-                }
+                    
+                    // Focus on the local folder input to prompt the user
+                    const localFolderInput = document.getElementById('localFolder');
+                    if (localFolderInput) {
+                        localFolderInput.focus();
+                        localFolderInput.scrollIntoView({ behavior: 'smooth' });
+                    }
             } else {
                 // This is a presenter - initialize WebRTC
                 console.log('Initializing as presenter...');
@@ -700,6 +766,23 @@
                         break;
                 }
             });
+            
+            // Auto-load PDF when local folder is set
+            const localFolderInput = document.getElementById('localFolder');
+            if (localFolderInput) {
+                localFolderInput.addEventListener('input', function() {
+                    if (this.value && currentPdfName) {
+                        updateLocalFolder();
+                    }
+                });
+                
+                // Handle Enter key in the folder input
+                localFolderInput.addEventListener('keydown', function(event) {
+                    if (event.key === 'Enter') {
+                        updateLocalFolder();
+                    }
+                });
+            }
         });
     </script>
 </body>
