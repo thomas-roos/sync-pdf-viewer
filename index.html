@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Sync for GitHub Pages</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .sync-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        #qrcode {
+            margin: 20px auto;
+        }
+        
+        .url-display {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+            font-size: 14px;
+        }
+        
+        .pdf-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        input, select, button {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .pdf-container {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 60vh;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        kbd {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 0.9em;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+        }
+        
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Sync for GitHub Pages</h1>
+        
+        <div class="instructions">
+            <h3>How it works:</h3>
+            <ol>
+                <li><strong>Presenter:</strong> Select section (1-14) and page (1-20), then generate QR code</li>
+                <li><strong>Viewers:</strong> Scan QR code or visit the URL on their devices</li>
+                <li><strong>All devices:</strong> Automatically load the corresponding PDF (e.g., 3_15.pdf) from their local folders</li>
+            </ol>
+            <p><strong>PDF Format:</strong> Files should be named like <code>1_1.pdf</code>, <code>3_15.pdf</code>, <code>14_20.pdf</code>, etc.</p>
+            
+            <details style="margin-top: 15px;">
+                <summary style="cursor: pointer; font-weight: bold;">⌨️ Keyboard Shortcuts (Presenter)</summary>
+                <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><kbd>→</kbd> or <kbd>N</kbd> - Next PDF</li>
+                        <li><kbd>←</kbd> or <kbd>P</kbd> - Previous PDF</li>
+                        <li><kbd>Home</kbd> - Jump to start (1_1)</li>
+                        <li><kbd>End</kbd> - Jump to end (14_20)</li>
+                        <li><kbd>Ctrl+Enter</kbd> - Generate QR code</li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+        
+        <!-- Sync Section -->
+        <div class="sync-section">
+            <h3>Content Selection Control</h3>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                <div>
+                    <label for="chapterSelect">Section (1-14):</label>
+                    <select id="chapterSelect" onchange="updatePdfSelection()">
+                        <option value="">-- Select Section --</option>
+                        <option value="1">Section 1</option>
+                        <option value="2">Section 2</option>
+                        <option value="3">Section 3</option>
+                        <option value="4">Section 4</option>
+                        <option value="5">Section 5</option>
+                        <option value="6">Section 6</option>
+                        <option value="7">Section 7</option>
+                        <option value="8">Section 8</option>
+                        <option value="9">Section 9</option>
+                        <option value="10">Section 10</option>
+                        <option value="11">Section 11</option>
+                        <option value="12">Section 12</option>
+                        <option value="13">Section 13</option>
+                        <option value="14">Section 14</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="verseSelect">Page (1-20):</label>
+                    <select id="verseSelect" onchange="updatePdfSelection()">
+                        <option value="">-- Select Page --</option>
+                        <option value="1">Page 1</option>
+                        <option value="2">Page 2</option>
+                        <option value="3">Page 3</option>
+                        <option value="4">Page 4</option>
+                        <option value="5">Page 5</option>
+                        <option value="6">Page 6</option>
+                        <option value="7">Page 7</option>
+                        <option value="8">Page 8</option>
+                        <option value="9">Page 9</option>
+                        <option value="10">Page 10</option>
+                        <option value="11">Page 11</option>
+                        <option value="12">Page 12</option>
+                        <option value="13">Page 13</option>
+                        <option value="14">Page 14</option>
+                        <option value="15">Page 15</option>
+                        <option value="16">Page 16</option>
+                        <option value="17">Page 17</option>
+                        <option value="18">Page 18</option>
+                        <option value="19">Page 19</option>
+                        <option value="20">Page 20</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="selectedPdf">Selected PDF:</label>
+                    <input type="text" id="selectedPdf" readonly style="background: #f8f9fa; font-weight: bold;" placeholder="Section_Page">
+                </div>
+            </div>
+            
+            <div>
+                <button id="generateBtn" onclick="generateSyncUrl()" disabled>Generate QR Code</button>
+                <button onclick="clearSync()">Clear Selection</button>
+            </div>
+            
+            <!-- Navigation Controls -->
+            <div id="navigationControls" style="display: none; margin-top: 15px; padding: 15px; background: #e9ecef; border-radius: 5px;">
+                <h4>Quick Navigation</h4>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button id="prevBtn" onclick="navigatePrevious()" disabled>← Previous</button>
+                    <button id="nextBtn" onclick="navigateNext()" disabled>Next →</button>
+                    <span style="margin: 0 15px; font-weight: bold;" id="currentPosition">Section -, Page -</span>
+                    <button onclick="jumpToStart()">Jump to Start (1_1)</button>
+                    <button onclick="jumpToEnd()">Jump to End (14_20)</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label>
+                        <input type="checkbox" id="autoSync" checked> Auto-sync on navigation
+                    </label>
+                    <small style="margin-left: 10px; color: #666;">Automatically generate QR code when navigating</small>
+                </div>
+            </div>
+            
+            <div id="qrSection" style="display: none;">
+                <h4>Scan this QR code on other devices:</h4>
+                <div class="qr-container">
+                    <canvas id="qrcode"></canvas>
+                </div>
+                
+                <h4>Or visit this URL:</h4>
+                <div id="syncUrl" class="url-display"></div>
+                <button onclick="copySyncUrl()">Copy URL</button>
+            </div>
+        </div>
+        
+        <!-- Device Configuration -->
+        <div class="pdf-controls">
+            <h3>Device Configuration</h3>
+            <div>
+                <label for="deviceName">Device Name:</label>
+                <input type="text" id="deviceName" placeholder="My Device" value="">
+                
+                <label for="localFolder">Local Folder:</label>
+                <select id="localFolder">
+                    <option value="">-- Select Local Folder --</option>
+                    <option value="mobile1">Mobile 1</option>
+                    <option value="mobile2">Mobile 2</option>
+                    <option value="tablet1">Tablet 1</option>
+                    <option value="desktop">Desktop</option>
+                    <option value="backup">Backup</option>
+                </select>
+            </div>
+            
+            <div>
+                <button onclick="loadCurrentPDF()">Load Current PDF</button>
+                <button onclick="autoRefresh()">Auto Refresh (30s)</button>
+            </div>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <!-- PDF Viewer -->
+        <div class="pdf-container">
+            <iframe id="pdfViewer" src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <script>
+        let currentPdfName = '';
+        let autoRefreshInterval = null;
+        
+        // Set device name based on user agent
+        const deviceName = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 
+            'Mobile-' + Math.random().toString(36).substr(2, 3) : 
+            'Desktop-' + Math.random().toString(36).substr(2, 3);
+        document.getElementById('deviceName').value = deviceName;
+        
+        // Check URL parameters on load
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            
+            if (pdfFromUrl) {
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                
+                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
+                const pdfBase = currentPdfName.replace('.pdf', '');
+                const [section, page] = pdfBase.split('_');
+                
+                if (section && page) {
+                    document.getElementById('chapterSelect').value = section;
+                    document.getElementById('verseSelect').value = page;
+                    document.getElementById('selectedPdf').value = pdfBase;
+                }
+                
+                showStatus(`PDF sync received: Section ${section}, Page ${page}`, 'success');
+                
+                // Auto-load if local folder is selected
+                setTimeout(() => {
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    } else {
+                        showStatus('Please select your local folder to load the PDF', 'info');
+                    }
+                }, 1000);
+            } else {
+                showStatus('Select section and page, then generate QR code to sync with other devices', 'info');
+            }
+        });
+        
+        function updatePdfSelection() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const generateBtn = document.getElementById('generateBtn');
+            const navigationControls = document.getElementById('navigationControls');
+            
+            if (section && page) {
+                const pdfName = `${section}_${page}`;
+                document.getElementById('selectedPdf').value = pdfName;
+                generateBtn.disabled = false;
+                currentPdfName = `${pdfName}.pdf`;
+                
+                // Show navigation controls and update position
+                navigationControls.style.display = 'block';
+                updateNavigationButtons();
+                updateCurrentPosition();
+            } else {
+                document.getElementById('selectedPdf').value = '';
+                generateBtn.disabled = true;
+                currentPdfName = '';
+                navigationControls.style.display = 'none';
+            }
+        }
+        
+        function updateNavigationButtons() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            // Disable previous if at start (1_1)
+            prevBtn.disabled = (section === 1 && page === 1);
+            
+            // Disable next if at end (14_20)
+            nextBtn.disabled = (section === 14 && page === 20);
+        }
+        
+        function updateCurrentPosition() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const positionSpan = document.getElementById('currentPosition');
+            
+            if (section && page) {
+                positionSpan.textContent = `Section ${section}, Page ${page}`;
+            } else {
+                positionSpan.textContent = 'Section -, Page -';
+            }
+        }
+        
+        function navigateNext() {
+            let section = parseInt(document.getElementById('chapterSelect').value);
+            let page = parseInt(document.getElementById('verseSelect').value);
+            
+            if (!section || !page) return;
+            
+            // Navigate to next PDF
+            if (page < 20) {
+                page++;
+            } else if (section < 14) {
+                section++;
+                page = 1;
+            } else {
+                // Already at the end
+                return;
+            }
+            
+            // Update dropdowns
+            document.getElementById('chapterSelect').value = section.toString();
+            document.getElementById('verseSelect').value = page.toString();
+            
+            // Update PDF selection
+            updatePdfSelection();
+            
+            // Auto-sync if enabled
+            if (document.getElementById('autoSync').checked) {
+                setTimeout(generateSyncUrl, 100); // Small delay to ensure UI updates
+            }
+            
+            showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
+        }
+        
+        function navigatePrevious() {
+            let section = parseInt(document.getElementById('chapterSelect').value);
+            let page = parseInt(document.getElementById('verseSelect').value);
+            
+            if (!section || !page) return;
+            
+            // Navigate to previous PDF
+            if (page > 1) {
+                page--;
+            } else if (section > 1) {
+                section--;
+                page = 20;
+            } else {
+                // Already at the start
+                return;
+            }
+            
+            // Update dropdowns
+            document.getElementById('chapterSelect').value = section.toString();
+            document.getElementById('verseSelect').value = page.toString();
+            
+            // Update PDF selection
+            updatePdfSelection();
+            
+            // Auto-sync if enabled
+            if (document.getElementById('autoSync').checked) {
+                setTimeout(generateSyncUrl, 100); // Small delay to ensure UI updates
+            }
+            
+            showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
+        }
+        
+        function jumpToStart() {
+            document.getElementById('chapterSelect').value = '1';
+            document.getElementById('verseSelect').value = '1';
+            updatePdfSelection();
+            
+            if (document.getElementById('autoSync').checked) {
+                setTimeout(generateSyncUrl, 100);
+            }
+            
+            showStatus('Jumped to start: Section 1, Page 1', 'info');
+        }
+        
+        function jumpToEnd() {
+            document.getElementById('chapterSelect').value = '14';
+            document.getElementById('verseSelect').value = '20';
+            updatePdfSelection();
+            
+            if (document.getElementById('autoSync').checked) {
+                setTimeout(generateSyncUrl, 100);
+            }
+            
+            showStatus('Jumped to end: Section 14, Page 20', 'info');
+        }
+        
+        function generateSyncUrl() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            
+            if (!section || !page) {
+                showStatus('Please select both section and page', 'error');
+                return;
+            }
+            
+            const pdfName = `${section}_${page}.pdf`;
+            currentPdfName = pdfName;
+            
+            // Create sync URL with current page + PDF parameter
+            const baseUrl = window.location.origin + window.location.pathname;
+            const syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            
+            // Display URL
+            document.getElementById('syncUrl').textContent = syncUrl;
+            
+            // Generate QR code
+            const canvas = document.getElementById('qrcode');
+            QRCode.toCanvas(canvas, syncUrl, {
+                width: 256,
+                margin: 2,
+                color: {
+                    dark: '#000000',
+                    light: '#FFFFFF'
+                }
+            }, function(error) {
+                if (error) {
+                    showStatus('Failed to generate QR code: ' + error.message, 'error');
+                } else {
+                    document.getElementById('qrSection').style.display = 'block';
+                    showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
+                }
+            });
+        }
+        
+        function clearSync() {
+            document.getElementById('qrSection').style.display = 'none';
+            document.getElementById('chapterSelect').value = '';
+            document.getElementById('verseSelect').value = '';
+            document.getElementById('selectedPdf').value = '';
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('navigationControls').style.display = 'none';
+            currentPdfName = '';
+            showStatus('Selection cleared', 'info');
+        }
+        
+        function copySyncUrl() {
+            const url = document.getElementById('syncUrl').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                showStatus('Sync URL copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy URL. Please copy manually.', 'error');
+            });
+        }
+        
+        function loadCurrentPDF() {
+            const localFolder = document.getElementById('localFolder').value;
+            const pdfName = currentPdfName;
+            
+            if (!localFolder) {
+                showStatus('Please select a local folder', 'error');
+                return;
+            }
+            
+            if (!pdfName) {
+                showStatus('No PDF selected', 'error');
+                return;
+            }
+            
+            const pdfPath = `${localFolder}/${pdfName}`;
+            const pdfViewer = document.getElementById('pdfViewer');
+            
+            // Extract section and page for display
+            const pdfBase = pdfName.replace('.pdf', '');
+            const [section, page] = pdfBase.split('_');
+            
+            showStatus(`Loading Section ${section}, Page ${page} from ${localFolder}...`, 'info');
+            
+            pdfViewer.onload = function() {
+                showStatus(`Successfully loaded: Section ${section}, Page ${page}`, 'success');
+            };
+            
+            pdfViewer.onerror = function() {
+                showStatus(`Error loading: ${pdfPath}`, 'error');
+            };
+            
+            pdfViewer.src = pdfPath;
+        }
+        
+        function autoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                showStatus('Auto refresh disabled', 'info');
+                return;
+            }
+            
+            autoRefreshInterval = setInterval(() => {
+                // Check for URL parameter changes (in case URL was updated)
+                const urlParams = new URLSearchParams(window.location.search);
+                const pdfFromUrl = urlParams.get('pdf');
+                
+                if (pdfFromUrl && pdfFromUrl !== currentPdfName) {
+                    currentPdfName = decodeURIComponent(pdfFromUrl);
+                    document.getElementById('pdfFileName').value = currentPdfName;
+                    showStatus(`Auto-refreshed PDF: ${currentPdfName}`, 'info');
+                    
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    }
+                }
+            }, 30000); // Check every 30 seconds
+            
+            showStatus('Auto refresh enabled (30s intervals)', 'success');
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Auto-load PDF when local folder is selected
+        document.getElementById('localFolder').addEventListener('change', function() {
+            if (this.value && currentPdfName) {
+                loadCurrentPDF();
+            }
+        });
+        
+        // Keyboard shortcuts for navigation
+        document.addEventListener('keydown', function(event) {
+            // Only handle shortcuts if not typing in an input field
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            
+            // Only enable shortcuts if a PDF is selected
+            if (!section || !page) return;
+            
+            switch(event.key) {
+                case 'ArrowRight':
+                case 'n':
+                case 'N':
+                    event.preventDefault();
+                    navigateNext();
+                    break;
+                case 'ArrowLeft':
+                case 'p':
+                case 'P':
+                    event.preventDefault();
+                    navigatePrevious();
+                    break;
+                case 'Home':
+                    event.preventDefault();
+                    jumpToStart();
+                    break;
+                case 'End':
+                    event.preventDefault();
+                    jumpToEnd();
+                    break;
+                case ' ':
+                case 'Enter':
+                    if (event.ctrlKey || event.metaKey) {
+                        event.preventDefault();
+                        generateSyncUrl();
+                    }
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>

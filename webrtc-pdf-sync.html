@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC PDF Sync - No Registration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .connection-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .role-selector {
+            margin-bottom: 15px;
+        }
+        
+        .role-selector button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .role-selector button.active {
+            background: #007bff;
+            color: white;
+        }
+        
+        .role-selector button:not(.active) {
+            background: #e9ecef;
+            color: #495057;
+        }
+        
+        .connection-code {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        
+        .pdf-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        input, select, button, textarea {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .pdf-container {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 60vh;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .connected-devices {
+            background: #d4edda;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebRTC PDF Sync - No Registration Required</h1>
+        
+        <!-- Role Selection -->
+        <div class="connection-section">
+            <h3>Choose Your Role</h3>
+            <div class="role-selector">
+                <button id="hostBtn" onclick="setRole('host')">Host (Controller)</button>
+                <button id="clientBtn" onclick="setRole('client')">Client (Viewer)</button>
+            </div>
+            
+            <!-- Host Section -->
+            <div id="hostSection" style="display: none;">
+                <h4>Host - Share this code with clients:</h4>
+                <div id="hostCode" class="connection-code">Generating connection code...</div>
+                <button onclick="copyHostCode()">Copy Code</button>
+                <button onclick="generateNewCode()">Generate New Code</button>
+            </div>
+            
+            <!-- Client Section -->
+            <div id="clientSection" style="display: none;">
+                <h4>Client - Enter host's connection code:</h4>
+                <textarea id="clientCodeInput" placeholder="Paste the connection code from host here..." rows="4" style="width: 100%;"></textarea>
+                <button onclick="connectToHost()">Connect to Host</button>
+            </div>
+            
+            <div id="connectionStatus" class="status info" style="display: none;">Ready to connect</div>
+            <div id="connectedDevices" class="connected-devices" style="display: none;">
+                <strong>Connected Devices:</strong> <span id="deviceList">None</span>
+            </div>
+        </div>
+        
+        <!-- PDF Controls -->
+        <div class="pdf-controls">
+            <h3>PDF Control</h3>
+            <div>
+                <label for="deviceName">Device Name:</label>
+                <input type="text" id="deviceName" placeholder="My Device" value="">
+                
+                <label for="localFolder">Local Folder:</label>
+                <select id="localFolder">
+                    <option value="">-- Select Local Folder --</option>
+                    <option value="mobile1">Mobile 1</option>
+                    <option value="mobile2">Mobile 2</option>
+                    <option value="tablet1">Tablet 1</option>
+                    <option value="desktop">Desktop</option>
+                    <option value="backup">Backup</option>
+                </select>
+            </div>
+            
+            <div id="hostControls" style="display: none;">
+                <input type="text" id="pdfFileName" placeholder="PDF filename to sync" value="">
+                <button onclick="syncPDF()">Sync PDF to All Devices</button>
+            </div>
+            
+            <div>
+                <button onclick="loadCurrentPDF()">Load Current PDF</button>
+            </div>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <!-- PDF Viewer -->
+        <div class="pdf-container">
+            <iframe id="pdfViewer" src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <script>
+        let currentRole = null;
+        let peerConnection = null;
+        let dataChannel = null;
+        let connectedPeers = new Map();
+        let currentPdfName = '';
+        
+        // WebRTC configuration using free STUN servers
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+        };
+        
+        // Set device name based on user agent
+        const deviceName = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 
+            'Mobile-' + Math.random().toString(36).substr(2, 3) : 
+            'Desktop-' + Math.random().toString(36).substr(2, 3);
+        document.getElementById('deviceName').value = deviceName;
+        
+        function setRole(role) {
+            currentRole = role;
+            
+            // Update UI
+            document.getElementById('hostBtn').classList.toggle('active', role === 'host');
+            document.getElementById('clientBtn').classList.toggle('active', role === 'client');
+            
+            document.getElementById('hostSection').style.display = role === 'host' ? 'block' : 'none';
+            document.getElementById('clientSection').style.display = role === 'client' ? 'block' : 'none';
+            document.getElementById('hostControls').style.display = role === 'host' ? 'block' : 'none';
+            
+            if (role === 'host') {
+                initializeHost();
+            }
+            
+            showStatus(`Selected role: ${role}`, 'info');
+        }
+        
+        async function initializeHost() {
+            try {
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Create data channel
+                dataChannel = peerConnection.createDataChannel('pdfSync', {
+                    ordered: true
+                });
+                
+                dataChannel.onopen = () => {
+                    showStatus('Data channel opened', 'success');
+                };
+                
+                dataChannel.onmessage = (event) => {
+                    handleDataChannelMessage(JSON.parse(event.data));
+                };
+                
+                // Handle incoming connections
+                peerConnection.ondatachannel = (event) => {
+                    const channel = event.channel;
+                    channel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                };
+                
+                // Create offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                // Wait for ICE gathering to complete
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                // Display connection code
+                const connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                document.getElementById('hostCode').textContent = connectionCode;
+                
+                showStatus('Host initialized. Share the connection code with clients.', 'success');
+                
+            } catch (error) {
+                showStatus('Failed to initialize host: ' + error.message, 'error');
+            }
+        }
+        
+        async function connectToHost() {
+            const codeInput = document.getElementById('clientCodeInput').value.trim();
+            
+            if (!codeInput) {
+                showStatus('Please enter the connection code', 'error');
+                return;
+            }
+            
+            try {
+                const offer = JSON.parse(atob(codeInput));
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Handle data channel from host
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    
+                    dataChannel.onopen = () => {
+                        showStatus('Connected to host!', 'success');
+                        updateConnectedDevices();
+                        
+                        // Send device info to host
+                        sendMessage({
+                            type: 'deviceInfo',
+                            deviceName: document.getElementById('deviceName').value,
+                            timestamp: new Date().toISOString()
+                        });
+                    };
+                    
+                    dataChannel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                };
+                
+                await peerConnection.setRemoteDescription(offer);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Wait for ICE gathering
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                showStatus('Connecting to host...', 'info');
+                
+            } catch (error) {
+                showStatus('Failed to connect: ' + error.message, 'error');
+            }
+        }
+        
+        function handleDataChannelMessage(data) {
+            switch (data.type) {
+                case 'pdfSync':
+                    currentPdfName = data.pdfName;
+                    showStatus(`Received PDF sync: ${data.pdfName} from ${data.deviceName}`, 'info');
+                    
+                    // Auto-load if local folder is selected
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    }
+                    break;
+                    
+                case 'deviceInfo':
+                    showStatus(`Device connected: ${data.deviceName}`, 'success');
+                    updateConnectedDevices();
+                    break;
+            }
+        }
+        
+        function sendMessage(message) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(message));
+                return true;
+            }
+            return false;
+        }
+        
+        function syncPDF() {
+            const pdfName = document.getElementById('pdfFileName').value.trim();
+            const deviceName = document.getElementById('deviceName').value;
+            
+            if (!pdfName) {
+                showStatus('Please enter a PDF filename', 'error');
+                return;
+            }
+            
+            const message = {
+                type: 'pdfSync',
+                pdfName: pdfName,
+                deviceName: deviceName,
+                timestamp: new Date().toISOString()
+            };
+            
+            if (sendMessage(message)) {
+                showStatus(`Synced PDF: ${pdfName} to all connected devices`, 'success');
+                currentPdfName = pdfName;
+                
+                // Load on host device too
+                const localFolder = document.getElementById('localFolder').value;
+                if (localFolder) {
+                    loadCurrentPDF();
+                }
+            } else {
+                showStatus('No devices connected to sync with', 'error');
+            }
+        }
+        
+        function loadCurrentPDF() {
+            const localFolder = document.getElementById('localFolder').value;
+            const pdfName = currentPdfName || document.getElementById('pdfFileName').value;
+            
+            if (!localFolder) {
+                showStatus('Please select a local folder', 'error');
+                return;
+            }
+            
+            if (!pdfName) {
+                showStatus('No PDF filename specified', 'error');
+                return;
+            }
+            
+            const pdfPath = `${localFolder}/${pdfName}`;
+            const pdfViewer = document.getElementById('pdfViewer');
+            
+            showStatus(`Loading ${pdfName} from ${localFolder}...`, 'info');
+            
+            pdfViewer.onload = function() {
+                showStatus(`Successfully loaded: ${pdfName}`, 'success');
+            };
+            
+            pdfViewer.onerror = function() {
+                showStatus(`Error loading: ${pdfPath}`, 'error');
+            };
+            
+            pdfViewer.src = pdfPath;
+        }
+        
+        function copyHostCode() {
+            const code = document.getElementById('hostCode').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                showStatus('Connection code copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy code. Please copy manually.', 'error');
+            });
+        }
+        
+        function generateNewCode() {
+            if (currentRole === 'host') {
+                initializeHost();
+            }
+        }
+        
+        function updateConnectedDevices() {
+            const status = peerConnection && peerConnection.connectionState === 'connected' ? 'Connected' : 'Disconnected';
+            document.getElementById('deviceList').textContent = status;
+            document.getElementById('connectedDevices').style.display = 'block';
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            showStatus('Choose your role to get started', 'info');
+        });
+    </script>
+</body>
+</html>

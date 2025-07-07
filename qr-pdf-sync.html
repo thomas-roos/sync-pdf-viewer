@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code PDF Sync - No Registration</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .sync-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        #qrcode {
+            margin: 20px auto;
+        }
+        
+        .url-display {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+            font-size: 14px;
+        }
+        
+        .pdf-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        input, select, button {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .pdf-container {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 60vh;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>QR Code PDF Sync - No Registration</h1>
+        
+        <div class="instructions">
+            <h3>How it works:</h3>
+            <ol>
+                <li><strong>Controller:</strong> Enter PDF filename and generate QR code</li>
+                <li><strong>Other devices:</strong> Scan QR code or visit the URL</li>
+                <li><strong>All devices:</strong> Automatically load the PDF from their local folders</li>
+            </ol>
+        </div>
+        
+        <!-- Sync Section -->
+        <div class="sync-section">
+            <h3>PDF Sync Control</h3>
+            
+            <div>
+                <input type="text" id="pdfFileName" placeholder="Enter PDF filename" value="">
+                <button onclick="generateSyncUrl()">Generate QR Code</button>
+                <button onclick="clearSync()">Clear</button>
+            </div>
+            
+            <div id="qrSection" style="display: none;">
+                <h4>Scan this QR code on other devices:</h4>
+                <div class="qr-container">
+                    <canvas id="qrcode"></canvas>
+                </div>
+                
+                <h4>Or visit this URL:</h4>
+                <div id="syncUrl" class="url-display"></div>
+                <button onclick="copySyncUrl()">Copy URL</button>
+            </div>
+        </div>
+        
+        <!-- Device Configuration -->
+        <div class="pdf-controls">
+            <h3>Device Configuration</h3>
+            <div>
+                <label for="deviceName">Device Name:</label>
+                <input type="text" id="deviceName" placeholder="My Device" value="">
+                
+                <label for="localFolder">Local Folder:</label>
+                <select id="localFolder">
+                    <option value="">-- Select Local Folder --</option>
+                    <option value="mobile1">Mobile 1</option>
+                    <option value="mobile2">Mobile 2</option>
+                    <option value="tablet1">Tablet 1</option>
+                    <option value="desktop">Desktop</option>
+                    <option value="backup">Backup</option>
+                </select>
+            </div>
+            
+            <div>
+                <button onclick="loadCurrentPDF()">Load Current PDF</button>
+                <button onclick="autoRefresh()">Auto Refresh (30s)</button>
+            </div>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <!-- PDF Viewer -->
+        <div class="pdf-container">
+            <iframe id="pdfViewer" src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <script>
+        let currentPdfName = '';
+        let autoRefreshInterval = null;
+        
+        // Set device name based on user agent
+        const deviceName = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 
+            'Mobile-' + Math.random().toString(36).substr(2, 3) : 
+            'Desktop-' + Math.random().toString(36).substr(2, 3);
+        document.getElementById('deviceName').value = deviceName;
+        
+        // Check URL parameters on load
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pdfFromUrl = urlParams.get('pdf');
+            
+            if (pdfFromUrl) {
+                currentPdfName = decodeURIComponent(pdfFromUrl);
+                document.getElementById('pdfFileName').value = currentPdfName;
+                showStatus(`PDF sync received: ${currentPdfName}`, 'success');
+                
+                // Auto-load if local folder is selected
+                setTimeout(() => {
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    } else {
+                        showStatus('Please select your local folder to load the PDF', 'info');
+                    }
+                }, 1000);
+            } else {
+                showStatus('Enter PDF filename and generate QR code to sync with other devices', 'info');
+            }
+        });
+        
+        function generateSyncUrl() {
+            const pdfName = document.getElementById('pdfFileName').value.trim();
+            
+            if (!pdfName) {
+                showStatus('Please enter a PDF filename', 'error');
+                return;
+            }
+            
+            // Create sync URL with current page + PDF parameter
+            const baseUrl = window.location.origin + window.location.pathname;
+            const syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            
+            // Display URL
+            document.getElementById('syncUrl').textContent = syncUrl;
+            
+            // Generate QR code
+            const canvas = document.getElementById('qrcode');
+            QRCode.toCanvas(canvas, syncUrl, {
+                width: 256,
+                margin: 2,
+                color: {
+                    dark: '#000000',
+                    light: '#FFFFFF'
+                }
+            }, function(error) {
+                if (error) {
+                    showStatus('Failed to generate QR code: ' + error.message, 'error');
+                } else {
+                    document.getElementById('qrSection').style.display = 'block';
+                    showStatus(`QR code generated for: ${pdfName}`, 'success');
+                    currentPdfName = pdfName;
+                }
+            });
+        }
+        
+        function clearSync() {
+            document.getElementById('qrSection').style.display = 'none';
+            document.getElementById('pdfFileName').value = '';
+            currentPdfName = '';
+            showStatus('Sync cleared', 'info');
+        }
+        
+        function copySyncUrl() {
+            const url = document.getElementById('syncUrl').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                showStatus('Sync URL copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy URL. Please copy manually.', 'error');
+            });
+        }
+        
+        function loadCurrentPDF() {
+            const localFolder = document.getElementById('localFolder').value;
+            const pdfName = currentPdfName || document.getElementById('pdfFileName').value;
+            
+            if (!localFolder) {
+                showStatus('Please select a local folder', 'error');
+                return;
+            }
+            
+            if (!pdfName) {
+                showStatus('No PDF filename specified', 'error');
+                return;
+            }
+            
+            const pdfPath = `${localFolder}/${pdfName}`;
+            const pdfViewer = document.getElementById('pdfViewer');
+            
+            showStatus(`Loading ${pdfName} from ${localFolder}...`, 'info');
+            
+            pdfViewer.onload = function() {
+                showStatus(`Successfully loaded: ${pdfName}`, 'success');
+            };
+            
+            pdfViewer.onerror = function() {
+                showStatus(`Error loading: ${pdfPath}`, 'error');
+            };
+            
+            pdfViewer.src = pdfPath;
+        }
+        
+        function autoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                showStatus('Auto refresh disabled', 'info');
+                return;
+            }
+            
+            autoRefreshInterval = setInterval(() => {
+                // Check for URL parameter changes (in case URL was updated)
+                const urlParams = new URLSearchParams(window.location.search);
+                const pdfFromUrl = urlParams.get('pdf');
+                
+                if (pdfFromUrl && pdfFromUrl !== currentPdfName) {
+                    currentPdfName = decodeURIComponent(pdfFromUrl);
+                    document.getElementById('pdfFileName').value = currentPdfName;
+                    showStatus(`Auto-refreshed PDF: ${currentPdfName}`, 'info');
+                    
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    }
+                }
+            }, 30000); // Check every 30 seconds
+            
+            showStatus('Auto refresh enabled (30s intervals)', 'success');
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Auto-load PDF when local folder is selected
+        document.getElementById('localFolder').addEventListener('change', function() {
+            if (this.value && currentPdfName) {
+                loadCurrentPDF();
+            }
+        });
+    </script>
+</body>
+</html>
