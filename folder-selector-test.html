@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Folder Selector Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .modern { background: #007bff; color: white; border: none; border-radius: 4px; }
+        .fallback { background: #28a745; color: white; border: none; border-radius: 4px; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+        .error { background: #f8d7da; color: #721c24; }
+        .success { background: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <h1>📂 Folder Selector Test</h1>
+    
+    <div class="test-section">
+        <h3>Browser Support Check</h3>
+        <div id="supportInfo"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Modern API Test (Chrome/Edge)</h3>
+        <button class="modern" onclick="testModernAPI()">Test File System Access API</button>
+        <div id="modernResult" class="result" style="display: none;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Fallback Test (All Browsers)</h3>
+        <button class="fallback" onclick="testFallbackAPI()">Test webkitdirectory API</button>
+        <div id="fallbackResult" class="result" style="display: none;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Selected Files</h3>
+        <div id="fileList" style="max-height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;"></div>
+    </div>
+    
+    <script>
+        // Check browser support
+        function checkSupport() {
+            const supportInfo = document.getElementById('supportInfo');
+            let info = '';
+            
+            if ('showDirectoryPicker' in window) {
+                info += '✅ File System Access API supported (Modern browsers)<br>';
+            } else {
+                info += '❌ File System Access API not supported<br>';
+            }
+            
+            if ('webkitdirectory' in document.createElement('input')) {
+                info += '✅ webkitdirectory supported (Fallback method)<br>';
+            } else {
+                info += '❌ webkitdirectory not supported<br>';
+            }
+            
+            info += `<br><strong>Browser:</strong> ${navigator.userAgent.split(' ').pop()}<br>`;
+            info += `<strong>Platform:</strong> ${navigator.platform}`;
+            
+            supportInfo.innerHTML = info;
+        }
+        
+        async function testModernAPI() {
+            const resultDiv = document.getElementById('modernResult');
+            resultDiv.style.display = 'block';
+            
+            try {
+                if (!('showDirectoryPicker' in window)) {
+                    throw new Error('File System Access API not supported in this browser');
+                }
+                
+                resultDiv.innerHTML = 'Opening folder picker...';
+                resultDiv.className = 'result';
+                
+                const directoryHandle = await window.showDirectoryPicker();
+                
+                let fileCount = 0;
+                let fileList = [];
+                
+                for await (const [name, handle] of directoryHandle.entries()) {
+                    fileCount++;
+                    if (handle.kind === 'file') {
+                        fileList.push(`📄 ${name}`);
+                    } else {
+                        fileList.push(`📁 ${name}/`);
+                    }
+                    
+                    if (fileCount > 20) {
+                        fileList.push('... and more files');
+                        break;
+                    }
+                }
+                
+                resultDiv.innerHTML = `
+                    <strong>✅ Success!</strong><br>
+                    Selected folder: <strong>${directoryHandle.name}</strong><br>
+                    Files found: ${fileCount}${fileCount > 20 ? '+' : ''}
+                `;
+                resultDiv.className = 'result success';
+                
+                // Show file list
+                document.getElementById('fileList').innerHTML = fileList.join('<br>');
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    resultDiv.innerHTML = '⚠️ Folder selection cancelled';
+                    resultDiv.className = 'result';
+                } else {
+                    resultDiv.innerHTML = `❌ Error: ${error.message}`;
+                    resultDiv.className = 'result error';
+                }
+            }
+        }
+        
+        function testFallbackAPI() {
+            const resultDiv = document.getElementById('fallbackResult');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = 'Opening folder picker...';
+            resultDiv.className = 'result';
+            
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.multiple = true;
+            
+            input.onchange = (event) => {
+                const files = Array.from(event.target.files);
+                
+                if (files.length === 0) {
+                    resultDiv.innerHTML = '⚠️ No files selected';
+                    resultDiv.className = 'result';
+                    return;
+                }
+                
+                const firstFile = files[0];
+                const pathParts = firstFile.webkitRelativePath.split('/');
+                const folderName = pathParts[0];
+                
+                resultDiv.innerHTML = `
+                    <strong>✅ Success!</strong><br>
+                    Selected folder: <strong>${folderName}</strong><br>
+                    Files found: ${files.length}
+                `;
+                resultDiv.className = 'result success';
+                
+                // Show file list (first 20 files)
+                const fileList = files.slice(0, 20).map(file => 
+                    `📄 ${file.webkitRelativePath}`
+                );
+                
+                if (files.length > 20) {
+                    fileList.push(`... and ${files.length - 20} more files`);
+                }
+                
+                document.getElementById('fileList').innerHTML = fileList.join('<br>');
+            };
+            
+            input.oncancel = () => {
+                resultDiv.innerHTML = '⚠️ Folder selection cancelled';
+                resultDiv.className = 'result';
+            };
+            
+            input.click();
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', checkSupport);
+    </script>
+</body>
+</html>

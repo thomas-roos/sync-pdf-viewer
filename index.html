@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Sync for GitHub Pages</title>
+    <script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .container { max-width: 800px; margin: 0 auto; }
@@ -19,17 +19,29 @@
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         #qrSection { display: none; margin-top: 20px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
         .url-display { background: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; margin: 10px 0; }
-        #navigationControls { display: none; margin-top: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa; }
+        #navigationControls { margin-top: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa; }
         #connectionStatus { padding: 10px; margin: 10px 0; border-radius: 4px; background: #f8f9fa; border: 1px solid #ddd; }
         .connected { color: #155724; font-weight: bold; }
         .disconnected { color: #721c24; font-weight: bold; }
         .connecting { color: #856404; font-weight: bold; }
         #connectionLog { height: 100px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-top: 10px; font-family: monospace; font-size: 12px; background: #f8f9fa; }
+        .peer-info { background: #e3f2fd; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .debug-section { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 12px; }
+        #folderStatus.success { background: #d4edda; color: #155724; }
+        #folderStatus.error { background: #f8d7da; color: #721c24; }
+        #folderStatus.info { background: #d1ecf1; color: #0c5460; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>PDF Sync for GitHub Pages</h1>
+        
+        <!-- Connection Info -->
+        <div class="peer-info">
+            <div><strong>Connection ID:</strong> <span id="peerId">Connecting...</span></div>
+            <div><strong>Role:</strong> <span id="roleDisplay">Detecting...</span></div>
+            <div><strong>Connected Viewers:</strong> <span id="connectedPeers">0</span></div>
+        </div>
         
         <div>
             <label for="chapterSelect">Section (1-14):</label>
@@ -85,25 +97,15 @@
         </div>
         
         <button id="generateBtn" onclick="generateQR()">Generate QR Code</button>
-        <button onclick="testButton()">Test Button</button>
-        <button onclick="generateSimpleQR()">Simple QR</button>
-        <button onclick="checkDataChannel()">Check Data Channel</button>
         
-        <!-- WebRTC Connection Status -->
-        <div id="connectionStatus">
-            <strong>WebRTC Status:</strong> <span id="connectionState" class="disconnected">Disconnected</span>
-            <button id="reconnectBtn" style="display: none;">Reconnect</button>
-            <div id="connectionLog"></div>
-        </div>
-        
-        <!-- Navigation Controls for Presenter -->
+        <!-- Navigation Controls - ALWAYS VISIBLE for presenters -->
         <div id="navigationControls">
             <h4>Navigation Controls:</h4>
             <div style="margin-bottom: 10px;">
-                <button id="prevBtn">← Previous</button>
-                <button id="nextBtn">Next →</button>
-                <button id="startBtn">Jump to Start</button>
-                <button id="endBtn">Jump to End</button>
+                <button id="prevBtn" onclick="previousPdf()">← Previous</button>
+                <button id="nextBtn" onclick="nextPdf()">Next →</button>
+                <button id="startBtn" onclick="jumpToStart()">Jump to Start</button>
+                <button id="endBtn" onclick="jumpToEnd()">Jump to End</button>
             </div>
             <div style="font-size: 14px; color: #666;">
                 <strong>Keyboard Shortcuts:</strong> ← → (navigate), Home (start), End (end), Ctrl+Enter (generate QR)
@@ -113,6 +115,12 @@
             </div>
         </div>
         
+        <!-- Connection Status -->
+        <div id="connectionStatus">
+            <strong>Connection Status:</strong> <span id="connectionState" class="disconnected">Initializing</span>
+            <div id="connectionLog"></div>
+        </div>
+        
         <div id="status" class="status" style="display: none;"></div>
         
         <div id="qrSection">
@@ -120,153 +128,184 @@
             <canvas id="qrcode"></canvas>
             <h3>URL:</h3>
             <div id="syncUrl" class="url-display"></div>
-            <button id="copyBtn">Copy URL</button>
+            <button id="copyBtn" onclick="copyUrl()">Copy URL</button>
         </div>
         
         <!-- Viewer Section (for PDF display) -->
         <div id="viewerSection" style="margin-top: 20px;">
-            <div id="folderInputSection" style="margin-bottom: 15px;">
-                <label for="localFolder">Local PDF Folder Path:</label>
-                <input type="text" id="localFolder" placeholder="Enter folder path (e.g., 'pdfs', 'documents')">
-                <button id="setFolderBtn">Set Folder</button>
+            <div id="folderInputSection" style="margin-bottom: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa;">
+                <h4>📁 PDF Folder Setup</h4>
+                <div style="margin-bottom: 10px;">
+                    <label for="localFolder"><strong>Local PDF Folder:</strong></label>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
+                        <input type="text" id="localFolder" placeholder="Type folder path OR click Select Folder" style="flex: 1; padding: 8px;">
+                        <button id="setFolderBtn" onclick="updateLocalFolder()" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                            📂 Select Folder
+                        </button>
+                    </div>
+                </div>
+                <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                    <strong>Options:</strong>
+                    • Click "Select Folder" to browse for a folder
+                    • Or type a path manually and click the button
+                    • Or use quick examples below
+                </div>
+                <div style="font-size: 12px; color: #666;">
+                    <strong>Quick Examples:</strong>
+                    <button onclick="setExampleFolder('example-pdfs')" style="font-size: 11px; padding: 2px 6px; margin: 2px;">example-pdfs</button>
+                    <button onclick="setExampleFolder('pdfs')" style="font-size: 11px; padding: 2px 6px; margin: 2px;">pdfs</button>
+                    <button onclick="setExampleFolder('documents')" style="font-size: 11px; padding: 2px 6px; margin: 2px;">documents</button>
+                    <button onclick="setExampleFolder('./files')" style="font-size: 11px; padding: 2px 6px; margin: 2px;">./files</button>
+                </div>
+                <div id="folderStatus" style="margin-top: 10px; padding: 8px; border-radius: 4px; display: none;"></div>
             </div>
             
             <div id="pdfViewerContainer" style="width: 100%; height: 600px; border: 1px solid #ddd;">
-                <iframe id="pdfViewer" style="width: 100%; height: 100%; border: none;"></iframe>
+                <div id="pdfPlaceholder" style="display: flex; align-items: center; justify-content: center; height: 100%; background: #f8f9fa; color: #666; flex-direction: column;">
+                    <div style="font-size: 48px; margin-bottom: 20px;">📄</div>
+                    <div style="font-size: 18px; margin-bottom: 10px;">PDF Viewer</div>
+                    <div style="font-size: 14px; text-align: center;">
+                        Click "📂 Select Folder" above to choose your PDF folder<br>
+                        <small style="color: #999;">Supports modern browsers with folder selection</small>
+                    </div>
+                </div>
+                <iframe id="pdfViewer" style="width: 100%; height: 100%; border: none; display: none;"></iframe>
             </div>
+        </div>
+        
+        <!-- Debug Section (collapsible) -->
+        <div class="debug-section">
+            <details>
+                <summary><strong>🔧 Debug Info</strong> (click to expand)</summary>
+                <div style="margin-top: 10px;">
+                    <button onclick="testConnection()">Test Connection</button>
+                    <button onclick="clearLogs()">Clear Logs</button>
+                    <div id="debugInfo" style="margin-top: 10px; font-family: monospace;"></div>
+                </div>
+            </details>
         </div>
     </div>
     
     <script>
-        // WebRTC variables
-        let peerConnection = null;
-        let dataChannel = null;
-        let isPresenter = true;
-        let connectionCode = '';
-        let connectedPeers = new Map();
-        let messageQueue = []; // Queue for messages when data channel isn't ready
-        let dataChannelReady = false; // Track data channel readiness
-        let connectionTimeout = null; // Timeout for connection attempts
-        let maxConnectionTime = 30000; // 30 seconds timeout
-        
-        // WebRTC configuration using free STUN servers
-        const rtcConfig = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun.services.mozilla.com' }
-            ]
-        };
-        
         // Global variables
+        let peer = null;
+        let connections = new Map(); // Store multiple connections
+        let isPresenter = true;
         let currentPdfName = '';
+        let logs = [];
         
         // DOM elements
         const chapterSelect = document.getElementById('chapterSelect');
         const verseSelect = document.getElementById('verseSelect');
         const selectedPdf = document.getElementById('selectedPdf');
-        const generateBtn = document.getElementById('generateBtn');
         const statusDiv = document.getElementById('status');
         const qrSection = document.getElementById('qrSection');
         const syncUrlDiv = document.getElementById('syncUrl');
-        const copyBtn = document.getElementById('copyBtn');
         const localFolder = document.getElementById('localFolder');
-        const setFolderBtn = document.getElementById('setFolderBtn');
         const pdfViewer = document.getElementById('pdfViewer');
+        const connectionState = document.getElementById('connectionState');
+        const connectionLog = document.getElementById('connectionLog');
+        const peerId = document.getElementById('peerId');
+        const roleDisplay = document.getElementById('roleDisplay');
+        const connectedPeers = document.getElementById('connectedPeers');
         const navigationControls = document.getElementById('navigationControls');
         const currentPosition = document.getElementById('currentPosition');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
-        const startBtn = document.getElementById('startBtn');
-        const endBtn = document.getElementById('endBtn');
-        const connectionState = document.getElementById('connectionState');
-        const connectionLog = document.getElementById('connectionLog');
-        const reconnectBtn = document.getElementById('reconnectBtn');
+        const debugInfo = document.getElementById('debugInfo');
         
-        // Hide QR section initially
-        qrSection.style.display = 'none';
+        // Logging function
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push(logEntry);
+            console.log(logEntry);
+            updateConnectionLog();
+            updateDebugInfo();
+        }
+        
+        function updateConnectionLog() {
+            if (connectionLog) {
+                connectionLog.innerHTML = logs.slice(-8).join('<br>');
+                connectionLog.scrollTop = connectionLog.scrollHeight;
+            }
+        }
+        
+        function updateDebugInfo() {
+            if (!debugInfo) return;
+            
+            let info = '';
+            info += `Role: ${isPresenter ? 'Presenter' : 'Viewer'}<br>`;
+            info += `Peer ID: ${peer ? peer.id || 'Connecting...' : 'Not initialized'}<br>`;
+            info += `Connections: ${connections.size}<br>`;
+            info += `Current PDF: ${currentPdfName || 'None'}<br>`;
+            
+            debugInfo.innerHTML = info;
+        }
+        
+        function clearLogs() {
+            logs = [];
+            updateConnectionLog();
+        }
+        
+        function updateConnectionStatus(state, message) {
+            if (connectionState) {
+                connectionState.textContent = state;
+                connectionState.className = state.toLowerCase().replace(' ', '-');
+            }
+            if (message) {
+                log(`🔗 ${state}: ${message}`);
+            }
+        }
+        
+        function updateConnectedPeersCount() {
+            if (connectedPeers) {
+                connectedPeers.textContent = connections.size;
+            }
+        }
         
         // Event listeners
         chapterSelect.addEventListener('change', updateSelection);
         verseSelect.addEventListener('change', updateSelection);
-        generateBtn.addEventListener('click', generateQR);
-        copyBtn.addEventListener('click', copyUrl);
-        setFolderBtn.addEventListener('click', updateLocalFolder);
-        prevBtn.addEventListener('click', previousPdf);
-        nextBtn.addEventListener('click', nextPdf);
-        startBtn.addEventListener('click', jumpToStart);
-        endBtn.addEventListener('click', jumpToEnd);
-        reconnectBtn.addEventListener('click', reconnectWebRTC);
         
-        // Functions
-        function reconnectWebRTC() {
-            if (!isPresenter) return;
-            
-            updateConnectionStatus('Reconnecting', 'Attempting to reconnect WebRTC');
-            
-            // Reset connection state
-            dataChannelReady = false;
-            messageQueue = []; // Clear old messages
-            
-            // Close existing connection if any
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            
-            if (dataChannel) {
-                dataChannel.close();
-                dataChannel = null;
-            }
-            
-            // Reinitialize
-            initializePresenter().then(() => {
-                updateConnectionStatus('Ready', 'WebRTC reinitialized');
-                showStatus('WebRTC connection reinitialized', 'success');
-            }).catch(error => {
-                updateConnectionStatus('Error', `Reconnection failed: ${error.message || 'Unknown error'}`);
-                showStatus('Failed to reconnect: ' + error.message, 'error');
-            });
-        }
         function updateSelection() {
-            console.log('=== updateSelection called ===');
             const section = chapterSelect.value;
             const page = verseSelect.value;
             
-            console.log('Section:', section, 'Page:', page);
+            log(`Selection changed: Section ${section}, Page ${page}`);
             
             if (section && page) {
                 const pdfName = `${section}_${page}`;
                 selectedPdf.value = pdfName;
                 currentPdfName = `${pdfName}.pdf`;
                 
-                // Show navigation controls for presenter
+                // ALWAYS show navigation controls for presenters (FIX for the issue)
                 if (isPresenter) {
+                    // Ensure navigation controls are visible
                     navigationControls.style.display = 'block';
                     updateNavigationButtons();
                     updateCurrentPosition();
                     
-                    // Broadcast to connected viewers
-                    console.log('Broadcasting change to viewers...');
-                    setTimeout(() => {
-                        broadcastPdfChange(parseInt(section), parseInt(page));
-                    }, 100); // Small delay to ensure UI updates first
+                    // Broadcast change to all connected viewers
+                    broadcastPdfChange(parseInt(section), parseInt(page));
+                } else {
+                    // For viewers, try to load the PDF
+                    loadCurrentPdf();
                 }
                 
-                console.log('Selection complete, PDF name set to:', currentPdfName);
                 showStatus(`Selected: Section ${section}, Page ${page}`, 'success');
             } else {
                 selectedPdf.value = '';
                 currentPdfName = '';
                 
-                if (navigationControls) {
-                    navigationControls.style.display = 'none';
+                // Keep navigation controls visible for presenters even with incomplete selection
+                if (isPresenter) {
+                    navigationControls.style.display = 'block';
+                    updateCurrentPosition();
                 }
-                
-                console.log('Incomplete selection');
-                showStatus('Please select both section and page', 'info');
             }
+            
+            updateDebugInfo();
         }
         
         function updateNavigationButtons() {
@@ -274,11 +313,11 @@
             const page = parseInt(verseSelect.value);
             
             if (prevBtn && nextBtn) {
-                // Disable previous if at start (1_1)
-                prevBtn.disabled = (section === 1 && page === 1);
+                // Disable previous if at start (1_1) or no selection
+                prevBtn.disabled = !section || !page || (section === 1 && page === 1);
                 
-                // Disable next if at end (14_20)
-                nextBtn.disabled = (section === 14 && page === 20);
+                // Disable next if at end (14_20) or no selection
+                nextBtn.disabled = !section || !page || (section === 14 && page === 20);
             }
         }
         
@@ -313,11 +352,8 @@
                 return; // Already at start
             }
             
-            // Update dropdowns
             chapterSelect.value = newSection.toString();
             verseSelect.value = newPage.toString();
-            
-            // Update PDF selection
             updateSelection();
             
             showStatus(`Navigated to Section ${newSection}, Page ${newPage}`, 'info');
@@ -341,11 +377,8 @@
                 return; // Already at end
             }
             
-            // Update dropdowns
             chapterSelect.value = newSection.toString();
             verseSelect.value = newPage.toString();
-            
-            // Update PDF selection
             updateSelection();
             
             showStatus(`Navigated to Section ${newSection}, Page ${newPage}`, 'info');
@@ -355,7 +388,6 @@
             chapterSelect.value = '1';
             verseSelect.value = '1';
             updateSelection();
-            
             showStatus('Jumped to start: Section 1, Page 1', 'info');
         }
         
@@ -363,420 +395,195 @@
             chapterSelect.value = '14';
             verseSelect.value = '20';
             updateSelection();
-            
             showStatus('Jumped to end: Section 14, Page 20', 'info');
         }
         
-        // WebRTC Functions
-        async function initializePresenter() {
-            try {
-                console.log('Starting WebRTC initialization...');
-                updateConnectionStatus('Initializing', 'Setting up WebRTC connection');
-                
-                peerConnection = new RTCPeerConnection(rtcConfig);
-                console.log('RTCPeerConnection created');
-                
-                // Create data channel for sending PDF updates
-                dataChannel = peerConnection.createDataChannel('pdfSync', {
-                    ordered: true
-                });
-                console.log('Data channel created');
-                
-                dataChannel.onopen = () => {
-                    console.log('Data channel opened');
-                    dataChannelReady = true;
-                    updateConnectionStatus('Connected', 'Data channel opened');
-                    showStatus('Real-time sync ready - QR codes will include connection info', 'success');
-                    
-                    // Process any queued messages
-                    processMessageQueue();
-                };
-                
-                dataChannel.onclose = () => {
-                    console.log('Data channel closed');
-                    dataChannelReady = false;
-                    updateConnectionStatus('Disconnected', 'Data channel closed');
-                };
-                
-                dataChannel.onerror = (error) => {
-                    console.error('Data channel error:', error);
-                    dataChannelReady = false;
-                    updateConnectionStatus('Error', `Data channel error: ${error.message || 'Unknown error'}`);
-                };
-                
-                // Handle incoming viewer connections
-                peerConnection.ondatachannel = (event) => {
-                    console.log('Incoming data channel');
-                    updateConnectionStatus('Connected', 'Viewer connected with data channel');
-                    const channel = event.channel;
-                    channel.onmessage = (event) => {
-                        handleDataChannelMessage(JSON.parse(event.data));
-                    };
-                };
-                
-                // Monitor connection changes
-                peerConnection.onconnectionstatechange = () => {
-                    console.log('Connection state changed:', peerConnection.connectionState);
-                    updateConnectionStatus(
-                        peerConnection.connectionState.charAt(0).toUpperCase() + peerConnection.connectionState.slice(1),
-                        `Connection state: ${peerConnection.connectionState}`
-                    );
-                    
-                    if (peerConnection.connectionState === 'connected') {
-                        showStatus('Viewer connected via QR code - real-time sync active', 'success');
-                        
-                        // Force check data channel state when peer connection is established
-                        setTimeout(() => {
-                            if (dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
-                                console.log('Data channel is open but not marked as ready - fixing');
-                                dataChannelReady = true;
-                                updateConnectionStatus('Connected', 'Data channel ready (forced check)');
-                                processMessageQueue();
-                            }
-                        }, 1000);
-                        
-                    } else if (peerConnection.connectionState === 'disconnected') {
-                        showStatus('Viewer disconnected - QR codes will work normally', 'info');
-                        dataChannelReady = false;
-                    } else if (peerConnection.connectionState === 'failed') {
-                        showStatus('Connection failed - trying to reconnect', 'error');
-                        dataChannelReady = false;
-                        // Auto-reconnect on failure
-                        setTimeout(() => {
-                            if (isPresenter) {
-                                reconnectWebRTC();
-                            }
-                        }, 2000);
-                    }
-                };
-                
-                peerConnection.onicegatheringstatechange = () => {
-                    updateConnectionStatus('Connecting', `ICE gathering state: ${peerConnection.iceGatheringState}`);
-                };
-                
-                peerConnection.oniceconnectionstatechange = () => {
-                    updateConnectionStatus('Connecting', `ICE connection state: ${peerConnection.iceConnectionState}`);
-                };
-                
-                console.log('Creating offer...');
-                updateConnectionStatus('Connecting', 'Creating connection offer');
-                // Create offer for viewers to connect
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                console.log('Offer created and set');
-                
-                // Wait for ICE gathering to complete
-                console.log('Waiting for ICE gathering...');
-                updateConnectionStatus('Connecting', 'Gathering connection candidates');
-                await new Promise((resolve) => {
-                    if (peerConnection.iceGatheringState === 'complete') {
-                        resolve();
-                    } else {
-                        peerConnection.addEventListener('icegatheringstatechange', () => {
-                            console.log('ICE gathering state:', peerConnection.iceGatheringState);
-                            if (peerConnection.iceGatheringState === 'complete') {
-                                resolve();
-                            }
-                        });
-                    }
-                });
-                
-                // Store connection code for QR code inclusion
-                const connectionData = JSON.stringify(peerConnection.localDescription);
-                updateConnectionStatus('Ready', 'Connection data prepared for QR code');
-                
-                // Compress the connection data to make QR code smaller
-                if (typeof pako !== 'undefined') {
-                    try {
-                        // Convert to UTF-8 array
-                        const uint8Array = new TextEncoder().encode(connectionData);
-                        // Compress with maximum compression level (9)
-                        const compressed = pako.deflate(uint8Array, { level: 9 });
-                        // Convert to base64url (more compact than regular base64)
-                        const base64 = btoa(String.fromCharCode.apply(null, compressed))
-                            .replace(/\+/g, '-')
-                            .replace(/\//g, '_')
-                            .replace(/=+$/, '');
-                        connectionCode = base64;
-                        console.log('Connection data compressed: Original size:', connectionData.length, 'Compressed size:', connectionCode.length);
-                        updateConnectionStatus('Ready', `Connection data compressed: ${Math.round((1 - connectionCode.length / connectionData.length) * 100)}% reduction`);
-                    } catch (error) {
-                        console.error('Compression failed, using uncompressed data:', error);
-                        connectionCode = btoa(connectionData);
-                        updateConnectionStatus('Warning', 'Using uncompressed connection data');
-                    }
-                } else {
-                    console.warn('Pako compression library not available, using uncompressed data');
-                    connectionCode = btoa(connectionData);
-                    updateConnectionStatus('Warning', 'Compression library not available');
-                }
-                
-                console.log('Connection code generated, length:', connectionCode.length);
-                showStatus('Real-time sync initialized - QR codes will auto-connect viewers', 'success');
-                
-            } catch (error) {
-                console.error('WebRTC initialization failed:', error);
-                updateConnectionStatus('Error', `WebRTC initialization failed: ${error.message || 'Unknown error'}`);
-                showStatus('Failed to initialize real-time sync: ' + error.message, 'error');
-                
-                // Continue without WebRTC - don't let this break the app
-                connectionCode = '';
-                console.log('Continuing without WebRTC...');
-            }
-        }
-        
-        async function connectToPresenterFromQR(connectionData) {
-            try {
-                console.log('Connecting to presenter via QR...');
-                updateConnectionStatus('Connecting', 'Establishing connection to presenter');
-                showStatus('Connecting to presenter...', 'info');
-                
-                let offerData;
-                
-                // Try to decompress the connection data
-                if (typeof pako !== 'undefined') {
-                    try {
-                        // Convert base64url to base64
-                        let base64 = connectionData
-                            .replace(/-/g, '+')
-                            .replace(/_/g, '/');
-                        // Add padding if needed
-                        while (base64.length % 4) {
-                            base64 += '=';
-                        }
-                        
-                        // Convert base64 to binary string
-                        const binaryString = atob(base64);
-                        // Convert to Uint8Array
-                        const uint8Array = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            uint8Array[i] = binaryString.charCodeAt(i);
-                        }
-                        // Decompress
-                        const decompressed = pako.inflate(uint8Array);
-                        // Convert back to string
-                        const decompressedStr = new TextDecoder().decode(decompressed);
-                        offerData = JSON.parse(decompressedStr);
-                        console.log('Connection data decompressed successfully');
-                        updateConnectionStatus('Connecting', 'Connection data decompressed successfully');
-                    } catch (error) {
-                        console.error('Decompression failed, trying uncompressed data:', error);
-                        updateConnectionStatus('Warning', 'Decompression failed, trying uncompressed data');
-                        offerData = JSON.parse(atob(connectionData));
-                    }
-                } else {
-                    console.warn('Pako compression library not available, using uncompressed data');
-                    updateConnectionStatus('Warning', 'Compression library not available');
-                    offerData = JSON.parse(atob(connectionData));
-                }
-                
-                peerConnection = new RTCPeerConnection(rtcConfig);
-                
-                // Monitor connection changes
-                peerConnection.onconnectionstatechange = () => {
-                    console.log('Connection state changed:', peerConnection.connectionState);
-                    updateConnectionStatus(
-                        peerConnection.connectionState.charAt(0).toUpperCase() + peerConnection.connectionState.slice(1),
-                        `Connection state: ${peerConnection.connectionState}`
-                    );
-                    
-                    // Force check data channel when connection is established
-                    if (peerConnection.connectionState === 'connected') {
-                        setTimeout(() => {
-                            if (dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
-                                console.log('Data channel is open but not marked as ready - fixing');
-                                dataChannelReady = true;
-                                updateConnectionStatus('Connected', 'Data channel ready (forced check)');
-                                
-                                // Send viewer info to presenter
-                                sendMessage({
-                                    type: 'viewerConnected',
-                                    deviceName: 'Viewer-' + Math.random().toString(36).substr(2, 3),
-                                    timestamp: new Date().toISOString()
-                                });
-                            }
-                        }, 1000);
-                    }
-                };
-                
-                peerConnection.onicegatheringstatechange = () => {
-                    updateConnectionStatus('Connecting', `ICE gathering state: ${peerConnection.iceGatheringState}`);
-                };
-                
-                peerConnection.oniceconnectionstatechange = () => {
-                    updateConnectionStatus('Connecting', `ICE connection state: ${peerConnection.iceConnectionState}`);
-                };
-                
-                // Handle data channel from presenter
-                peerConnection.ondatachannel = (event) => {
-                    dataChannel = event.channel;
-                    
-                    dataChannel.onopen = () => {
-                        dataChannelReady = true;
-                        updateConnectionStatus('Connected', 'Data channel opened');
-                        showStatus('Connected to presenter! PDFs will sync automatically.', 'success');
-                        
-                        // Send viewer info to presenter
-                        sendMessage({
-                            type: 'viewerConnected',
-                            deviceName: 'Viewer-' + Math.random().toString(36).substr(2, 3),
-                            timestamp: new Date().toISOString()
-                        });
-                    };
-                    
-                    dataChannel.onmessage = (event) => {
-                        handleDataChannelMessage(JSON.parse(event.data));
-                    };
-                    
-                    dataChannel.onclose = () => {
-                        dataChannelReady = false;
-                        updateConnectionStatus('Disconnected', 'Data channel closed');
-                        showStatus('Disconnected from presenter', 'error');
-                    };
-                    
-                    dataChannel.onerror = (error) => {
-                        dataChannelReady = false;
-                        updateConnectionStatus('Error', `Data channel error: ${error.message || 'Unknown error'}`);
-                        console.error('Data channel error:', error);
-                    };
-                };
-                
-                updateConnectionStatus('Connecting', 'Setting remote description');
-                await peerConnection.setRemoteDescription(offerData);
-                
-                updateConnectionStatus('Connecting', 'Creating answer');
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                
-                // Wait for ICE gathering
-                updateConnectionStatus('Connecting', 'Gathering ICE candidates');
-                await new Promise((resolve) => {
-                    if (peerConnection.iceGatheringState === 'complete') {
-                        resolve();
-                    } else {
-                        peerConnection.addEventListener('icegatheringstatechange', () => {
-                            if (peerConnection.iceGatheringState === 'complete') {
-                                resolve();
-                            }
-                        });
-                    }
-                });
-                
-                updateConnectionStatus('Connected', 'Connection established');
-                
-            } catch (error) {
-                updateConnectionStatus('Error', `Connection failed: ${error.message || 'Unknown error'}`);
-                showStatus('Failed to connect: ' + error.message, 'error');
-                console.error('WebRTC connection error:', error);
-            }
-        }
-        
-        function handleDataChannelMessage(data) {
-            console.log('=== Received WebRTC message ===', data);
-            updateConnectionStatus('Active', `Received message: ${data.type}`);
+        // PeerJS initialization
+        function initializePeerJS() {
+            log('🚀 Initializing PeerJS...');
+            updateConnectionStatus('Connecting', 'Initializing PeerJS');
             
+            // Check URL parameters to determine role
+            const urlParams = new URLSearchParams(window.location.search);
+            const presenterPeerId = urlParams.get('peer');
+            
+            if (presenterPeerId) {
+                // This is a viewer connecting to a presenter
+                isPresenter = false;
+                roleDisplay.textContent = 'Viewer';
+                log('👁️ Initializing as viewer');
+                
+                // Hide navigation controls for viewers
+                navigationControls.style.display = 'none';
+            } else {
+                // This is a presenter
+                isPresenter = true;
+                roleDisplay.textContent = 'Presenter';
+                log('🎤 Initializing as presenter');
+                
+                // ALWAYS show navigation controls for presenters
+                navigationControls.style.display = 'block';
+            }
+            
+            // Create peer with random ID
+            peer = new Peer();
+            
+            // Peer events
+            peer.on('open', function(id) {
+                log(`✅ PeerJS connected with ID: ${id}`);
+                peerId.textContent = id;
+                updateConnectionStatus('Ready', 'PeerJS initialized');
+                
+                if (!isPresenter && presenterPeerId) {
+                    // Viewer: Connect to presenter
+                    connectToPresenter(presenterPeerId);
+                } else if (isPresenter) {
+                    showStatus('Ready to generate QR codes for viewers', 'success');
+                }
+                
+                updateDebugInfo();
+            });
+            
+            peer.on('connection', function(conn) {
+                log(`📞 Incoming connection from: ${conn.peer}`);
+                handleIncomingConnection(conn);
+            });
+            
+            peer.on('error', function(err) {
+                log(`❌ PeerJS error: ${err.type} - ${err.message}`);
+                updateConnectionStatus('Error', `PeerJS error: ${err.message}`);
+                showStatus(`Connection error: ${err.message}`, 'error');
+            });
+            
+            peer.on('disconnected', function() {
+                log('🔌 PeerJS disconnected');
+                updateConnectionStatus('Disconnected', 'PeerJS disconnected');
+            });
+        }
+        
+        function handleIncomingConnection(conn) {
+            log(`🤝 Setting up connection with ${conn.peer}`);
+            connections.set(conn.peer, conn);
+            updateConnectedPeersCount();
+            
+            conn.on('open', function() {
+                log(`✅ Connection opened with ${conn.peer}`);
+                updateConnectionStatus('Connected', `Connected to ${connections.size} viewer(s)`);
+                showStatus(`Viewer connected: ${conn.peer.substring(0, 8)}...`, 'success');
+                
+                // Send current PDF state to new viewer
+                const section = chapterSelect.value;
+                const page = verseSelect.value;
+                if (section && page) {
+                    sendToPeer(conn, {
+                        type: 'pdfChange',
+                        section: parseInt(section),
+                        page: parseInt(page),
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            });
+            
+            conn.on('data', function(data) {
+                log(`📨 Received data from ${conn.peer}: ${data.type}`);
+                handleReceivedData(data, conn);
+            });
+            
+            conn.on('close', function() {
+                log(`🔌 Connection closed with ${conn.peer}`);
+                connections.delete(conn.peer);
+                updateConnectedPeersCount();
+                updateConnectionStatus(connections.size > 0 ? 'Connected' : 'Ready', 
+                    `${connections.size} viewer(s) connected`);
+            });
+            
+            conn.on('error', function(err) {
+                log(`❌ Connection error with ${conn.peer}: ${err.message}`);
+                connections.delete(conn.peer);
+                updateConnectedPeersCount();
+            });
+        }
+        
+        function connectToPresenter(presenterPeerId) {
+            log(`📞 Connecting to presenter: ${presenterPeerId}`);
+            updateConnectionStatus('Connecting', 'Connecting to presenter');
+            
+            const conn = peer.connect(presenterPeerId);
+            connections.set(presenterPeerId, conn);
+            
+            conn.on('open', function() {
+                log('✅ Connected to presenter!');
+                updateConnectionStatus('Connected', 'Connected to presenter');
+                showStatus('Connected to presenter! Real-time sync active.', 'success');
+                updateConnectedPeersCount();
+                
+                // Send viewer info
+                sendToPeer(conn, {
+                    type: 'viewerConnected',
+                    viewerId: peer.id,
+                    timestamp: new Date().toISOString()
+                });
+            });
+            
+            conn.on('data', function(data) {
+                log(`📨 Received data from presenter: ${data.type}`);
+                handleReceivedData(data, conn);
+            });
+            
+            conn.on('close', function() {
+                log('🔌 Disconnected from presenter');
+                connections.delete(presenterPeerId);
+                updateConnectedPeersCount();
+                updateConnectionStatus('Disconnected', 'Disconnected from presenter');
+                showStatus('Disconnected from presenter', 'error');
+            });
+            
+            conn.on('error', function(err) {
+                log(`❌ Connection error: ${err.message}`);
+                updateConnectionStatus('Error', `Connection error: ${err.message}`);
+                showStatus(`Connection failed: ${err.message}`, 'error');
+            });
+        }
+        
+        function handleReceivedData(data, conn) {
             switch (data.type) {
                 case 'pdfChange':
-                    console.log('Received pdfChange message:', data);
-                    updateConnectionStatus('Active', `PDF change: Section ${data.section}, Page ${data.page}`);
+                    log(`📄 PDF change received: Section ${data.section}, Page ${data.page}`);
                     
-                    // Update dropdowns to match presenter
+                    // Update UI
                     chapterSelect.value = data.section.toString();
                     verseSelect.value = data.page.toString();
                     selectedPdf.value = `${data.section}_${data.page}`;
                     currentPdfName = `${data.section}_${data.page}.pdf`;
                     
-                    // Update UI and load PDF if folder is set
-                    const folderPath = localFolder.value;
-                    if (folderPath) {
-                        // Create PDF path
-                        const pdfPath = `${folderPath}/${currentPdfName}`;
-                        console.log('Loading PDF:', pdfPath);
-                        updateConnectionStatus('Active', `Loading PDF: ${pdfPath}`);
-                        
-                        // Update iframe with PDF
-                        pdfViewer.src = pdfPath;
-                        console.log('PDF viewer updated with new path');
-                        
-                        // Force reload the iframe
-                        setTimeout(() => {
-                            try {
-                                pdfViewer.contentWindow.location.reload();
-                                updateConnectionStatus('Active', 'PDF viewer reloaded');
-                            } catch (error) {
-                                console.error('Error reloading PDF viewer:', error);
-                                updateConnectionStatus('Warning', `Error reloading PDF: ${error.message || 'Unknown error'}`);
-                            }
-                        }, 100);
-                    } else {
-                        console.warn('Local folder not set, cannot load PDF');
-                        updateConnectionStatus('Warning', 'Local folder not set, cannot load PDF');
-                    }
+                    // Load PDF using the best available method
+                    loadCurrentPdf();
                     
-                    showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
+                    updateDebugInfo();
                     break;
                     
                 case 'viewerConnected':
                     if (isPresenter) {
-                        updateConnectionStatus('Connected', `Viewer connected: ${data.deviceName}`);
-                        showStatus(`Viewer connected: ${data.deviceName}`, 'success');
+                        log(`👤 Viewer connected: ${data.viewerId}`);
+                        showStatus(`New viewer connected`, 'success');
                     }
                     break;
             }
         }
         
-        function sendMessage(message) {
-            if (dataChannel && dataChannelReady && dataChannel.readyState === 'open') {
-                try {
-                    console.log('Sending message via sendMessage:', message);
-                    updateConnectionStatus('Active', `Sending message: ${message.type}`);
-                    dataChannel.send(JSON.stringify(message));
-                    return true;
-                } catch (error) {
-                    console.error('Error sending message:', error);
-                    updateConnectionStatus('Error', `Failed to send message: ${error.message || 'Unknown error'}`);
-                    return false;
-                }
-            } else {
-                console.warn('Data channel not ready, queueing message:', message);
-                updateConnectionStatus('Warning', `Data channel not ready, queueing message: ${message.type}`);
-                
-                // Queue the message for later
-                messageQueue.push(message);
-                
-                // Limit queue size to prevent memory issues
-                if (messageQueue.length > 10) {
-                    messageQueue.shift(); // Remove oldest message
-                }
-                
+        function sendToPeer(conn, data) {
+            try {
+                conn.send(data);
+                log(`📤 Sent ${data.type} to ${conn.peer}`);
+                return true;
+            } catch (error) {
+                log(`❌ Failed to send to ${conn.peer}: ${error.message}`);
                 return false;
             }
         }
         
-        function processMessageQueue() {
-            console.log('Processing message queue, length:', messageQueue.length);
-            
-            while (messageQueue.length > 0 && dataChannelReady && dataChannel.readyState === 'open') {
-                const message = messageQueue.shift();
-                try {
-                    console.log('Sending queued message:', message);
-                    updateConnectionStatus('Active', `Sending queued message: ${message.type}`);
-                    dataChannel.send(JSON.stringify(message));
-                } catch (error) {
-                    console.error('Error sending queued message:', error);
-                    updateConnectionStatus('Error', `Failed to send queued message: ${error.message || 'Unknown error'}`);
-                    break; // Stop processing if there's an error
-                }
-            }
-            
-            if (messageQueue.length === 0) {
-                updateConnectionStatus('Connected', 'All queued messages sent');
-            }
-        }
-        
         function broadcastPdfChange(section, page) {
-            console.log('=== Broadcasting PDF change ===', section, page);
-            updateConnectionStatus('Active', `Broadcasting change: Section ${section}, Page ${page}`);
+            log(`📡 Broadcasting PDF change: Section ${section}, Page ${page}`);
             
             const message = {
                 type: 'pdfChange',
@@ -785,255 +592,58 @@
                 timestamp: new Date().toISOString()
             };
             
-            if (sendMessage(message)) {
-                updateConnectionStatus('Active', `PDF change broadcast successful`);
-                showStatus(`PDF synced to all connected viewers: Section ${section}, Page ${page}`, 'success');
-                return true;
-            } else {
-                // Message was queued or failed
-                if (messageQueue.length > 0) {
-                    updateConnectionStatus('Warning', `PDF change queued (${messageQueue.length} messages waiting)`);
-                    showStatus(`PDF change queued - will sync when viewer connects`, 'warning');
-                } else {
-                    updateConnectionStatus('Error', `PDF change broadcast failed`);
-                    showStatus(`Failed to sync PDF change`, 'error');
+            let successCount = 0;
+            connections.forEach((conn, peerId) => {
+                if (sendToPeer(conn, message)) {
+                    successCount++;
                 }
-                return false;
+            });
+            
+            if (successCount > 0) {
+                showStatus(`PDF synced to ${successCount} viewer(s)`, 'success');
             }
         }
         
         function generateQR() {
-            console.log('=== generateQR called ===');
-            
             const section = chapterSelect.value;
             const page = verseSelect.value;
             
-            console.log('Section:', section, 'Page:', page);
-            console.log('QRious available:', typeof QRious !== 'undefined');
-            
             if (!section || !page) {
                 showStatus('Please select both section and page before generating QR code', 'error');
-                alert('Please select both section and page');
                 return;
             }
+            
+            if (!peer || !peer.id) {
+                showStatus('PeerJS not ready yet, please wait...', 'error');
+                return;
+            }
+            
+            log(`🔲 Generating QR code for Section ${section}, Page ${page}`);
             
             const pdfName = `${section}_${page}.pdf`;
-            
-            // Create sync URL with WebRTC connection data
             const baseUrl = window.location.origin + window.location.pathname;
-            let syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
+            const syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}&peer=${encodeURIComponent(peer.id)}`;
             
-            // Add WebRTC connection data if available
-            if (connectionCode) {
-                syncUrl += `&r=${encodeURIComponent(connectionCode)}`;
-                console.log('Added WebRTC connection code to QR');
-            }
+            // Display URL
+            syncUrlDiv.textContent = syncUrl;
+            qrSection.style.display = 'block';
             
-            console.log('Generated URL:', syncUrl);
-            console.log('URL length:', syncUrl.length);
-            
-            // Display URL first
-            if (syncUrlDiv) {
-                syncUrlDiv.textContent = syncUrl;
-                console.log('URL displayed in div');
-            } else {
-                console.error('syncUrlDiv not found');
-            }
-            
-            // Show QR section
-            if (qrSection) {
-                qrSection.style.display = 'block';
-                console.log('QR section shown');
-            } else {
-                console.error('qrSection not found');
-            }
-            
-            // Try to generate QR code with multiple approaches
-            const canvas = document.getElementById('qrcode');
-            console.log('Canvas element:', canvas);
-            
-            if (!canvas) {
-                console.error('QR canvas not found');
-                alert('QR canvas element not found');
-                return;
-            }
-            
-            // Check if QRious is available
-            if (typeof QRious === 'undefined') {
-                console.error('QRious library not loaded');
-                alert('QRious library not loaded - check network connection');
-                
-                // Fallback: try to load QRious dynamically
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js';
-                script.onload = function() {
-                    console.log('QRious loaded dynamically');
-                    generateQRCodeWithQRious(canvas, syncUrl, section, page);
-                };
-                script.onerror = function() {
-                    console.error('Failed to load QRious dynamically');
-                    alert('Failed to load QR code library');
-                };
-                document.head.appendChild(script);
-                return;
-            }
-            
-            // Generate QR code with QRious
-            generateQRCodeWithQRious(canvas, syncUrl, section, page);
-        }
-        
-        function generateQRCodeWithQRious(canvas, syncUrl, section, page) {
+            // Generate QR code
             try {
-                console.log('Generating QR code with QRious...');
-                console.log('Canvas:', canvas);
-                console.log('URL:', syncUrl);
-                
-                showStatus('Generating QR code...', 'info');
-                
-                // Clear any existing content
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
+                const canvas = document.getElementById('qrcode');
                 const qr = new QRious({
                     element: canvas,
                     value: syncUrl,
                     size: 300,
-                    level: 'L',
-                    background: '#ffffff',
-                    foreground: '#000000'
+                    level: 'L'
                 });
                 
-                console.log('QR code object created:', qr);
-                console.log('Canvas width:', canvas.width, 'height:', canvas.height);
-                
-                // Force a repaint
-                canvas.style.display = 'none';
-                canvas.offsetHeight; // Trigger reflow
-                canvas.style.display = 'block';
-                
-                console.log('QR code generated successfully');
-                
-                const statusMsg = connectionCode ? 
-                    `QR code generated with real-time sync for Section ${section}, Page ${page}` :
-                    `QR code generated for Section ${section}, Page ${page} (basic sync)`;
-                showStatus(statusMsg, 'success');
+                log('✅ QR code generated successfully');
+                showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
                 
             } catch (error) {
-                console.error('QR generation error:', error);
-                showStatus('QR generation failed: ' + error.message, 'error');
-                alert('QR generation failed: ' + error.message);
-                
-                // Fallback: show URL as text
-                if (canvas) {
-                    const ctx = canvas.getContext('2d');
-                    ctx.font = '12px Arial';
-                    ctx.fillText('QR generation failed', 10, 20);
-                    ctx.fillText('Use URL below', 10, 40);
-                }
-            }
-        }
-        
-        function testButton() {
-            alert('Test button works!');
-            console.log('Test button clicked');
-            showStatus('Test button clicked', 'info');
-            
-            // Test QR generation with a simple URL
-            const canvas = document.getElementById('qrcode');
-            if (canvas && typeof QRious !== 'undefined') {
-                try {
-                    const testQr = new QRious({
-                        element: canvas,
-                        value: 'https://example.com',
-                        size: 200,
-                        level: 'L'
-                    });
-                    qrSection.style.display = 'block';
-                    alert('Test QR code generated successfully!');
-                } catch (error) {
-                    alert('Test QR generation failed: ' + error.message);
-                }
-            } else {
-                alert('Canvas or QRious not available');
-            }
-        }
-        
-        function checkDataChannel() {
-            console.log('=== Data Channel Status Check ===');
-            console.log('peerConnection:', peerConnection);
-            console.log('peerConnection.connectionState:', peerConnection ? peerConnection.connectionState : 'null');
-            console.log('dataChannel:', dataChannel);
-            console.log('dataChannel.readyState:', dataChannel ? dataChannel.readyState : 'null');
-            console.log('dataChannelReady flag:', dataChannelReady);
-            console.log('messageQueue length:', messageQueue.length);
-            
-            let status = 'Data Channel Status:\n';
-            status += `Peer Connection: ${peerConnection ? peerConnection.connectionState : 'null'}\n`;
-            status += `Data Channel: ${dataChannel ? dataChannel.readyState : 'null'}\n`;
-            status += `Ready Flag: ${dataChannelReady}\n`;
-            status += `Queue Length: ${messageQueue.length}`;
-            
-            alert(status);
-            
-            // Try to force data channel ready if conditions are met
-            if (peerConnection && peerConnection.connectionState === 'connected' && 
-                dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
-                
-                console.log('Forcing data channel ready state');
-                dataChannelReady = true;
-                updateConnectionStatus('Connected', 'Data channel forced ready');
-                processMessageQueue();
-                alert('Data channel forced ready and queue processed!');
-            }
-        }
-        function generateSimpleQR() {
-            console.log('Trying simple QR generation...');
-            
-            const section = chapterSelect.value || '1';
-            const page = verseSelect.value || '1';
-            const pdfName = `${section}_${page}.pdf`;
-            const baseUrl = window.location.origin + window.location.pathname;
-            const syncUrl = `${baseUrl}?pdf=${encodeURIComponent(pdfName)}`;
-            
-            // Show the URL at least
-            if (syncUrlDiv) {
-                syncUrlDiv.textContent = syncUrl;
-            }
-            
-            if (qrSection) {
-                qrSection.style.display = 'block';
-            }
-            
-            // Try to use Google Charts API as fallback
-            const canvas = document.getElementById('qrcode');
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = function() {
-                    canvas.width = 300;
-                    canvas.height = 300;
-                    ctx.drawImage(img, 0, 0, 300, 300);
-                    console.log('QR code generated using Google Charts API');
-                    showStatus('QR code generated successfully', 'success');
-                };
-                img.onerror = function() {
-                    console.error('Failed to load QR code from Google Charts API');
-                    // Draw a placeholder
-                    canvas.width = 300;
-                    canvas.height = 300;
-                    ctx.fillStyle = '#f0f0f0';
-                    ctx.fillRect(0, 0, 300, 300);
-                    ctx.fillStyle = '#000';
-                    ctx.font = '16px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('QR Code', 150, 140);
-                    ctx.fillText('Generation Failed', 150, 160);
-                    ctx.fillText('Use URL below', 150, 180);
-                };
-                
-                const encodedUrl = encodeURIComponent(syncUrl);
-                img.src = `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodedUrl}`;
+                log(`❌ QR generation failed: ${error.message}`);
+                showStatus(`QR generation failed: ${error.message}`, 'error');
             }
         }
         
@@ -1046,30 +656,337 @@
             });
         }
         
-        function updateLocalFolder() {
-            const folderPath = localFolder.value;
-            if (folderPath) {
-                showStatus(`Local folder set to: ${folderPath}`, 'success');
-                
-                // Try to load the current PDF if selected
-                if (currentPdfName) {
-                    // Create PDF path
-                    const pdfPath = `${folderPath}/${currentPdfName}`;
-                    console.log('Loading PDF:', pdfPath);
-                    
-                    // Update iframe with PDF
-                    pdfViewer.src = pdfPath;
-                    console.log('PDF viewer updated with new path');
-                } else {
-                    console.log('No PDF selected yet');
-                }
+        async function updateLocalFolder() {
+            // Check if we should open folder selector or use typed path
+            const folderPath = localFolder.value.trim();
+            
+            if (!folderPath) {
+                // No path entered, try to open folder selector
+                await openFolderSelector();
+                return;
+            }
+            
+            log(`📁 Setting local folder: ${folderPath}`);
+            
+            // Try to load current PDF if available
+            if (currentPdfName) {
+                loadPdfFromFolder(folderPath, currentPdfName);
             } else {
-                showStatus('Please enter a local folder path', 'error');
+                // Check if we can get PDF info from URL or selections
+                const section = chapterSelect.value;
+                const page = verseSelect.value;
+                
+                if (section && page) {
+                    const pdfName = `${section}_${page}.pdf`;
+                    currentPdfName = pdfName;
+                    loadPdfFromFolder(folderPath, pdfName);
+                } else {
+                    log(`📁 Folder set: ${folderPath} (no PDF selected yet)`);
+                    showStatus(`Folder set: ${folderPath} - waiting for PDF selection`, 'success');
+                }
             }
         }
         
+        async function openFolderSelector() {
+            try {
+                log('📂 Opening folder selector...');
+                showStatus('Opening folder selector...', 'info');
+                
+                // Check if File System Access API is supported (Chrome, Edge)
+                if ('showDirectoryPicker' in window) {
+                    log('✅ Using File System Access API');
+                    const directoryHandle = await window.showDirectoryPicker();
+                    
+                    // Store the directory handle for later use
+                    window.selectedDirectoryHandle = directoryHandle;
+                    
+                    // Update the input field
+                    localFolder.value = directoryHandle.name;
+                    log(`📁 Selected folder: ${directoryHandle.name}`);
+                    showStatus(`Folder selected: ${directoryHandle.name}`, 'success');
+                    
+                    // Try to load current PDF using the directory handle
+                    if (currentPdfName) {
+                        await loadPdfFromDirectoryHandle(directoryHandle, currentPdfName);
+                    } else {
+                        const section = chapterSelect.value;
+                        const page = verseSelect.value;
+                        
+                        if (section && page) {
+                            const pdfName = `${section}_${page}.pdf`;
+                            currentPdfName = pdfName;
+                            await loadPdfFromDirectoryHandle(directoryHandle, pdfName);
+                        }
+                    }
+                    
+                } else {
+                    // Fallback for browsers without File System Access API
+                    log('⚠️ File System Access API not supported, using fallback');
+                    await openFolderSelectorFallback();
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    log('📂 Folder selection cancelled by user');
+                    showStatus('Folder selection cancelled', 'info');
+                } else {
+                    log(`❌ Error opening folder selector: ${error.message}`);
+                    showStatus(`Error: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        async function openFolderSelectorFallback() {
+            // Create a file input for folder selection (webkitdirectory)
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.multiple = true;
+            
+            return new Promise((resolve, reject) => {
+                input.onchange = async (event) => {
+                    const files = Array.from(event.target.files);
+                    if (files.length === 0) {
+                        reject(new Error('No folder selected'));
+                        return;
+                    }
+                    
+                    // Get the folder path from the first file
+                    const firstFile = files[0];
+                    const pathParts = firstFile.webkitRelativePath.split('/');
+                    const folderName = pathParts[0];
+                    
+                    log(`📁 Selected folder: ${folderName} (${files.length} files)`);
+                    
+                    // Store files for later access
+                    window.selectedFolderFiles = files;
+                    
+                    // Update input field
+                    localFolder.value = folderName;
+                    showStatus(`Folder selected: ${folderName} (${files.length} files)`, 'success');
+                    
+                    // Try to load current PDF from selected files
+                    if (currentPdfName) {
+                        await loadPdfFromFileList(files, currentPdfName);
+                    } else {
+                        const section = chapterSelect.value;
+                        const page = verseSelect.value;
+                        
+                        if (section && page) {
+                            const pdfName = `${section}_${page}.pdf`;
+                            currentPdfName = pdfName;
+                            await loadPdfFromFileList(files, pdfName);
+                        }
+                    }
+                    
+                    resolve();
+                };
+                
+                input.oncancel = () => {
+                    reject(new Error('AbortError'));
+                };
+                
+                // Trigger the file picker
+                input.click();
+            });
+        }
+        
+        async function loadPdfFromDirectoryHandle(directoryHandle, pdfName) {
+            try {
+                log(`📄 Loading PDF from directory handle: ${pdfName}`);
+                
+                const fileHandle = await directoryHandle.getFileHandle(pdfName);
+                const file = await fileHandle.getFile();
+                
+                // Create a blob URL for the PDF
+                const pdfUrl = URL.createObjectURL(file);
+                
+                // Update PDF viewer
+                const pdfViewer = document.getElementById('pdfViewer');
+                const pdfPlaceholder = document.getElementById('pdfPlaceholder');
+                const folderStatus = document.getElementById('folderStatus');
+                
+                if (pdfPlaceholder) pdfPlaceholder.style.display = 'none';
+                if (pdfViewer) {
+                    pdfViewer.style.display = 'block';
+                    pdfViewer.src = pdfUrl;
+                }
+                
+                log(`✅ PDF loaded from directory: ${pdfName}`);
+                showStatus(`PDF loaded: ${pdfName}`, 'success');
+                
+                if (folderStatus) {
+                    folderStatus.style.display = 'block';
+                    folderStatus.className = 'success';
+                    folderStatus.textContent = `✅ Successfully loaded: ${pdfName}`;
+                    setTimeout(() => {
+                        folderStatus.style.display = 'none';
+                    }, 3000);
+                }
+                
+            } catch (error) {
+                log(`❌ Failed to load PDF from directory: ${error.message}`);
+                showStatus(`Failed to load PDF: ${pdfName}`, 'error');
+                
+                const folderStatus = document.getElementById('folderStatus');
+                if (folderStatus) {
+                    folderStatus.style.display = 'block';
+                    folderStatus.className = 'error';
+                    folderStatus.textContent = `❌ File not found: ${pdfName}`;
+                }
+            }
+        }
+        
+        async function loadPdfFromFileList(files, pdfName) {
+            try {
+                log(`📄 Loading PDF from file list: ${pdfName}`);
+                
+                // Find the PDF file in the selected files
+                const pdfFile = files.find(file => 
+                    file.name === pdfName || 
+                    file.webkitRelativePath.endsWith(`/${pdfName}`)
+                );
+                
+                if (!pdfFile) {
+                    throw new Error(`PDF file not found: ${pdfName}`);
+                }
+                
+                // Create a blob URL for the PDF
+                const pdfUrl = URL.createObjectURL(pdfFile);
+                
+                // Update PDF viewer
+                const pdfViewer = document.getElementById('pdfViewer');
+                const pdfPlaceholder = document.getElementById('pdfPlaceholder');
+                const folderStatus = document.getElementById('folderStatus');
+                
+                if (pdfPlaceholder) pdfPlaceholder.style.display = 'none';
+                if (pdfViewer) {
+                    pdfViewer.style.display = 'block';
+                    pdfViewer.src = pdfUrl;
+                }
+                
+                log(`✅ PDF loaded from file list: ${pdfName}`);
+                showStatus(`PDF loaded: ${pdfName}`, 'success');
+                
+                if (folderStatus) {
+                    folderStatus.style.display = 'block';
+                    folderStatus.className = 'success';
+                    folderStatus.textContent = `✅ Successfully loaded: ${pdfName}`;
+                    setTimeout(() => {
+                        folderStatus.style.display = 'none';
+                    }, 3000);
+                }
+                
+            } catch (error) {
+                log(`❌ Failed to load PDF from file list: ${error.message}`);
+                showStatus(`Failed to load PDF: ${pdfName}`, 'error');
+                
+                const folderStatus = document.getElementById('folderStatus');
+                if (folderStatus) {
+                    folderStatus.style.display = 'block';
+                    folderStatus.className = 'error';
+                    folderStatus.textContent = `❌ File not found: ${pdfName}`;
+                }
+            }
+        }
+        
+        function loadPdfFromFolder(folderPath, pdfName) {
+            const pdfPath = `${folderPath}/${pdfName}`;
+            log(`📄 Loading PDF: ${pdfPath}`);
+            
+            // Show loading status
+            const folderStatus = document.getElementById('folderStatus');
+            const pdfPlaceholder = document.getElementById('pdfPlaceholder');
+            const pdfViewer = document.getElementById('pdfViewer');
+            
+            if (folderStatus) {
+                folderStatus.style.display = 'block';
+                folderStatus.className = 'info';
+                folderStatus.textContent = `Loading ${pdfName}...`;
+            }
+            
+            // Hide placeholder and show iframe
+            if (pdfPlaceholder) pdfPlaceholder.style.display = 'none';
+            if (pdfViewer) pdfViewer.style.display = 'block';
+            
+            // Set the PDF source
+            pdfViewer.src = pdfPath;
+            
+            // Add error handling for PDF loading
+            pdfViewer.onload = function() {
+                log(`✅ PDF loaded successfully: ${pdfName}`);
+                showStatus(`PDF loaded: ${pdfName} from ${folderPath}`, 'success');
+                
+                if (folderStatus) {
+                    folderStatus.className = 'success';
+                    folderStatus.textContent = `✅ Successfully loaded: ${pdfName}`;
+                    setTimeout(() => {
+                        folderStatus.style.display = 'none';
+                    }, 3000);
+                }
+            };
+            
+            pdfViewer.onerror = function() {
+                log(`❌ Failed to load PDF: ${pdfPath}`);
+                showStatus(`Failed to load PDF: ${pdfName} from ${folderPath}`, 'error');
+                
+                if (folderStatus) {
+                    folderStatus.className = 'error';
+                    folderStatus.textContent = `❌ Failed to load: ${pdfName}. Check if file exists in ${folderPath}/`;
+                }
+                
+                // Show placeholder again on error
+                if (pdfPlaceholder) pdfPlaceholder.style.display = 'flex';
+                if (pdfViewer) pdfViewer.style.display = 'none';
+            };
+            
+            // Force reload the iframe to ensure it loads the new PDF
+            setTimeout(() => {
+                try {
+                    if (pdfViewer.contentWindow) {
+                        pdfViewer.contentWindow.location.reload();
+                    }
+                } catch (error) {
+                    // Ignore cross-origin errors - PDF should still load
+                    log(`Note: Cross-origin reload blocked (this is normal)`);
+                }
+            }, 100);
+            
+            showStatus(`Loading PDF: ${pdfName} from ${folderPath}`, 'info');
+        }
+        
+        async function loadCurrentPdf() {
+            if (!currentPdfName) {
+                log('📄 No PDF selected to load');
+                return;
+            }
+            
+            // Try different methods in order of preference
+            if (window.selectedDirectoryHandle) {
+                // Use File System Access API
+                await loadPdfFromDirectoryHandle(window.selectedDirectoryHandle, currentPdfName);
+            } else if (window.selectedFolderFiles) {
+                // Use file list from webkitdirectory
+                await loadPdfFromFileList(window.selectedFolderFiles, currentPdfName);
+            } else {
+                // Fallback to path-based loading
+                const folderPath = localFolder.value.trim();
+                if (folderPath) {
+                    loadPdfFromFolder(folderPath, currentPdfName);
+                } else {
+                    log(`📄 PDF info received but no folder set yet`);
+                    showStatus(`PDF synced - Click "Select Folder" to view PDFs`, 'warning');
+                }
+            }
+        }
+        
+        function setExampleFolder(folderPath) {
+            localFolder.value = folderPath;
+            log(`📁 Set example folder: ${folderPath}`);
+            updateLocalFolder();
+        }
+        
         function showStatus(message, type) {
-            console.log('Status:', message, type);
             statusDiv.textContent = message;
             statusDiv.className = `status ${type}`;
             statusDiv.style.display = 'block';
@@ -1081,109 +998,81 @@
             }
         }
         
-        function updateConnectionStatus(state, message) {
-            if (!connectionState || !connectionLog) return;
+        function testConnection() {
+            log('🧪 Testing PeerJS connection...');
             
-            // Update connection state display
-            connectionState.textContent = state;
-            connectionState.className = state.toLowerCase();
-            
-            // Add log entry
-            const timestamp = new Date().toLocaleTimeString();
-            const logEntry = document.createElement('div');
-            logEntry.textContent = `[${timestamp}] ${state}: ${message}`;
-            connectionLog.appendChild(logEntry);
-            
-            // Auto-scroll to bottom
-            connectionLog.scrollTop = connectionLog.scrollHeight;
-            
-            // Show/hide reconnect button
-            if (state === 'Disconnected' && isPresenter) {
-                reconnectBtn.style.display = 'inline-block';
+            if (peer) {
+                log(`Peer ID: ${peer.id}`);
+                log(`Peer Open: ${!peer.destroyed}`);
+                log(`Connected Peers: ${connections.size}`);
+                log(`Role: ${isPresenter ? 'Presenter' : 'Viewer'}`);
+                
+                connections.forEach((conn, peerId) => {
+                    log(`Connection ${peerId}: ${conn.open ? 'Open' : 'Closed'}`);
+                });
             } else {
-                reconnectBtn.style.display = 'none';
+                log('❌ Peer not initialized');
             }
             
-            console.log(`WebRTC Status: ${state} - ${message}`);
+            updateDebugInfo();
         }
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM Content Loaded');
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (!isPresenter) return;
             
-            // Add keyboard shortcuts
-            document.addEventListener('keydown', function(event) {
-                // Only handle keyboard shortcuts if we're a presenter
-                if (!isPresenter) return;
-                
-                console.log('Key pressed:', event.key);
-                
-                switch (event.key) {
-                    case 'ArrowLeft':
-                        previousPdf();
-                        break;
-                    case 'ArrowRight':
-                        nextPdf();
-                        break;
-                    case 'Home':
-                        jumpToStart();
-                        break;
-                    case 'End':
-                        jumpToEnd();
-                        break;
-                    case 'Enter':
-                        if (event.ctrlKey) {
-                            generateQR();
-                        }
-                        break;
-                }
-            });
-            
-            // Auto-load PDF when local folder is set
-            if (localFolder) {
-                localFolder.addEventListener('input', function() {
-                    if (this.value && currentPdfName) {
-                        updateLocalFolder();
+            switch (event.key) {
+                case 'ArrowLeft':
+                    event.preventDefault();
+                    previousPdf();
+                    break;
+                case 'ArrowRight':
+                    event.preventDefault();
+                    nextPdf();
+                    break;
+                case 'Home':
+                    event.preventDefault();
+                    jumpToStart();
+                    break;
+                case 'End':
+                    event.preventDefault();
+                    jumpToEnd();
+                    break;
+                case 'Enter':
+                    if (event.ctrlKey) {
+                        event.preventDefault();
+                        generateQR();
                     }
-                });
-                
-                // Handle Enter key in the folder input
-                localFolder.addEventListener('keydown', function(event) {
-                    if (event.key === 'Enter') {
-                        updateLocalFolder();
-                    }
-                });
+                    break;
             }
+        });
+        
+        // Auto-load PDF when local folder is set
+        localFolder.addEventListener('input', function() {
+            if (this.value && currentPdfName) {
+                updateLocalFolder();
+            }
+        });
+        
+        // Handle Enter key in the folder input
+        localFolder.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                updateLocalFolder();
+            }
+        });
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 Page loaded, initializing...');
             
             // Check URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const pdfFromUrl = urlParams.get('pdf');
-            const rtcFromUrl = urlParams.get('r') || urlParams.get('rtc'); // Support both short and long parameter names
-            
-            // Set up periodic message queue processing
-            setInterval(() => {
-                if (messageQueue.length > 0) {
-                    console.log('Periodic queue check: processing messages');
-                    
-                    // Check if data channel is actually ready even if flag isn't set
-                    if (dataChannel && dataChannel.readyState === 'open' && !dataChannelReady) {
-                        console.log('Data channel is open but flag not set - fixing');
-                        dataChannelReady = true;
-                        updateConnectionStatus('Connected', 'Data channel ready (periodic check)');
-                    }
-                    
-                    if (dataChannelReady && dataChannel && dataChannel.readyState === 'open') {
-                        processMessageQueue();
-                    }
-                }
-            }, 2000); // Check every 2 seconds
+            const presenterPeerId = urlParams.get('peer');
             
             if (pdfFromUrl) {
-                console.log('Loading as viewer with PDF:', pdfFromUrl);
-                isPresenter = false;
+                // This is a viewer
                 currentPdfName = decodeURIComponent(pdfFromUrl);
-                
-                // Parse section and page from PDF name (e.g., "3_15" from "3_15.pdf")
                 const pdfBase = currentPdfName.replace('.pdf', '');
                 const [section, page] = pdfBase.split('_');
                 
@@ -1193,45 +1082,22 @@
                     selectedPdf.value = pdfBase;
                 }
                 
-                // Check if this is a WebRTC connection from QR code
-                if (rtcFromUrl) {
-                    // This is a viewer connecting via QR with real-time sync
-                    showStatus('Connecting via QR code for real-time sync...', 'info');
-                    
-                    connectToPresenterFromQR(decodeURIComponent(rtcFromUrl)).then(() => {
-                        showStatus(`Connected with real-time sync: Section ${section}, Page ${page}`, 'success');
-                        
-                        // Focus on the local folder input to prompt the user
-                        if (localFolder) {
-                            localFolder.focus();
-                            localFolder.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    }).catch((error) => {
-                        console.error('Failed to connect via QR code:', error);
-                        showStatus(`PDF loaded: Section ${section}, Page ${page} (no real-time sync)`, 'success');
-                    });
-                } else {
-                    showStatus(`PDF loaded: Section ${section}, Page ${page}`, 'success');
-                    
-                    // Focus on the local folder input to prompt the user
-                    if (localFolder) {
-                        localFolder.focus();
-                        localFolder.scrollIntoView({ behavior: 'smooth' });
-                    }
+                showStatus(`Viewer mode: Section ${section}, Page ${page}`, 'info');
+                
+                // Focus on the local folder input to prompt the user
+                if (localFolder) {
+                    localFolder.focus();
+                    localFolder.scrollIntoView({ behavior: 'smooth' });
                 }
             } else {
-                // This is a presenter - initialize WebRTC
-                console.log('Initializing as presenter...');
-                isPresenter = true;
-                
-                initializePresenter().then(() => {
-                    console.log('WebRTC initialization completed');
-                }).catch((error) => {
-                    console.error('WebRTC initialization failed, continuing without it:', error);
-                });
-                
-                showStatus('Select section and page, then click Generate QR Code', 'info');
+                showStatus('Presenter mode - select section and page, then generate QR', 'info');
             }
+            
+            // Initialize PeerJS
+            initializePeerJS();
+            
+            // Update debug info
+            updateDebugInfo();
         });
     </script>
 </body>

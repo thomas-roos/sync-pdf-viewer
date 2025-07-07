@@ -1,11 +1,22 @@
 # PDF Sync for GitHub Pages
 
+**✅ Now with PeerJS for reliable real-time connections!**
+
 ## Quick Setup
 
 1. **Fork or create a new repository**
 2. **Upload the HTML file** as `index.html`
 3. **Enable GitHub Pages** in repository settings
 4. **Access your app** at `https://yourusername.github.io/your-repo-name`
+
+## 🚀 New Features
+
+- ✅ **Real-time peer-to-peer connections** using PeerJS
+- ✅ **Multiple viewers support** - unlimited concurrent connections
+- ✅ **Reliable data synchronization** - no more connection issues
+- ✅ **Navigation controls** with keyboard shortcuts
+- ✅ **Connection status monitoring** with debug info
+- ✅ **Automatic reconnection** handling
 
 ## File Structure
 

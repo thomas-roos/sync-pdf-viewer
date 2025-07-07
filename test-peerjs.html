@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeerJS Connection Test</title>
+    <script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        #logs { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f8f9fa; font-family: monospace; font-size: 12px; }
+        button { padding: 8px 12px; margin: 5px; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 PeerJS Connection Test</h1>
+    
+    <div>
+        <strong>My Peer ID:</strong> <span id="myPeerId">Connecting...</span>
+        <button onclick="copyPeerId()">Copy ID</button>
+    </div>
+    
+    <div>
+        <input type="text" id="targetPeerId" placeholder="Enter peer ID to connect to">
+        <button onclick="connectToPeer()">Connect</button>
+    </div>
+    
+    <div>
+        <button onclick="sendTestMessage()">Send Test Message</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div id="status" class="status info">Initializing PeerJS...</div>
+    
+    <div>
+        <h3>Connection Logs:</h3>
+        <div id="logs"></div>
+    </div>
+    
+    <script>
+        let peer = null;
+        let connections = new Map();
+        let logs = [];
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push(logEntry);
+            console.log(logEntry);
+            updateLogs();
+        }
+        
+        function updateLogs() {
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML = logs.join('<br>');
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+        
+        function clearLogs() {
+            logs = [];
+            updateLogs();
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        function initializePeerJS() {
+            log('🚀 Initializing PeerJS...');
+            showStatus('Connecting to PeerJS server...', 'info');
+            
+            peer = new Peer();
+            
+            peer.on('open', function(id) {
+                log(`✅ PeerJS connected with ID: ${id}`);
+                document.getElementById('myPeerId').textContent = id;
+                showStatus('PeerJS ready! Share your Peer ID with others to connect.', 'success');
+            });
+            
+            peer.on('connection', function(conn) {
+                log(`📞 Incoming connection from: ${conn.peer}`);
+                handleConnection(conn);
+            });
+            
+            peer.on('error', function(err) {
+                log(`❌ PeerJS error: ${err.type} - ${err.message}`);
+                showStatus(`Error: ${err.message}`, 'error');
+            });
+            
+            peer.on('disconnected', function() {
+                log('🔌 PeerJS disconnected');
+                showStatus('Disconnected from PeerJS server', 'error');
+            });
+        }
+        
+        function handleConnection(conn) {
+            connections.set(conn.peer, conn);
+            log(`🤝 Setting up connection with ${conn.peer}`);
+            
+            conn.on('open', function() {
+                log(`✅ Connection opened with ${conn.peer}`);
+                showStatus(`Connected to ${connections.size} peer(s)`, 'success');
+            });
+            
+            conn.on('data', function(data) {
+                log(`📨 Received from ${conn.peer}: ${JSON.stringify(data)}`);
+                
+                // Echo back a response
+                conn.send({
+                    type: 'response',
+                    message: 'Message received!',
+                    timestamp: new Date().toISOString()
+                });
+            });
+            
+            conn.on('close', function() {
+                log(`🔌 Connection closed with ${conn.peer}`);
+                connections.delete(conn.peer);
+                showStatus(`Connected to ${connections.size} peer(s)`, connections.size > 0 ? 'success' : 'info');
+            });
+            
+            conn.on('error', function(err) {
+                log(`❌ Connection error with ${conn.peer}: ${err.message}`);
+                connections.delete(conn.peer);
+            });
+        }
+        
+        function connectToPeer() {
+            const targetId = document.getElementById('targetPeerId').value.trim();
+            if (!targetId) {
+                showStatus('Please enter a peer ID to connect to', 'error');
+                return;
+            }
+            
+            if (!peer || !peer.id) {
+                showStatus('PeerJS not ready yet', 'error');
+                return;
+            }
+            
+            log(`📞 Connecting to peer: ${targetId}`);
+            showStatus('Connecting...', 'info');
+            
+            const conn = peer.connect(targetId);
+            handleConnection(conn);
+        }
+        
+        function sendTestMessage() {
+            if (connections.size === 0) {
+                showStatus('No connections available. Connect to a peer first.', 'error');
+                return;
+            }
+            
+            const testMessage = {
+                type: 'test',
+                message: 'Hello from PeerJS test!',
+                timestamp: new Date().toISOString()
+            };
+            
+            connections.forEach((conn, peerId) => {
+                try {
+                    conn.send(testMessage);
+                    log(`📤 Sent test message to ${peerId}`);
+                } catch (error) {
+                    log(`❌ Failed to send to ${peerId}: ${error.message}`);
+                }
+            });
+            
+            showStatus(`Test message sent to ${connections.size} peer(s)`, 'success');
+        }
+        
+        function copyPeerId() {
+            const peerId = document.getElementById('myPeerId').textContent;
+            if (peerId && peerId !== 'Connecting...') {
+                navigator.clipboard.writeText(peerId).then(() => {
+                    showStatus('Peer ID copied to clipboard!', 'success');
+                });
+            }
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePeerJS();
+        });
+    </script>
+</body>
+</html>
