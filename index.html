@@ -129,6 +129,24 @@
             box-shadow: 0 1px 0 rgba(0,0,0,0.2);
         }
         
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
         .instructions {
             background: #fff3cd;
             border: 1px solid #ffeaa7;
@@ -145,11 +163,32 @@
         <div class="instructions">
             <h3>How it works:</h3>
             <ol>
-                <li><strong>Presenter:</strong> Select section (1-14) and page (1-20), then generate QR code</li>
-                <li><strong>Viewers:</strong> Scan QR code or visit the URL on their devices</li>
-                <li><strong>All devices:</strong> Automatically load the corresponding PDF (e.g., 3_15.pdf) from their local folders</li>
+                <li><strong>Presenter:</strong> Select section (1-14) and page (1-20), then choose sync method</li>
+                <li><strong>QR Code Mode:</strong> Generate QR codes for each PDF change (viewers scan each time)</li>
+                <li><strong>Real-time Mode:</strong> Viewers connect once, then auto-sync as presenter navigates</li>
+                <li><strong>All devices:</strong> Load corresponding PDF (e.g., 3_15.pdf) from their local folders</li>
             </ol>
             <p><strong>PDF Format:</strong> Files should be named like <code>1_1.pdf</code>, <code>3_15.pdf</code>, <code>14_20.pdf</code>, etc.</p>
+            
+            <details style="margin-top: 15px;">
+                <summary style="cursor: pointer; font-weight: bold;">🔄 Real-time Sync Setup</summary>
+                <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                    <p><strong>Presenter:</strong></p>
+                    <ol>
+                        <li>Select "Real-time Sync (WebRTC)" mode</li>
+                        <li>Choose "Presenter" when prompted</li>
+                        <li>Share the connection code with viewers</li>
+                        <li>Navigate normally - all viewers sync instantly!</li>
+                    </ol>
+                    <p><strong>Viewers:</strong></p>
+                    <ol>
+                        <li>Select "Real-time Sync (WebRTC)" mode</li>
+                        <li>Choose "Viewer" when prompted</li>
+                        <li>Enter connection code from presenter</li>
+                        <li>Set local folder name - PDFs load automatically!</li>
+                    </ol>
+                </div>
+            </details>
             
             <details style="margin-top: 15px;">
                 <summary style="cursor: pointer; font-weight: bold;">⌨️ Keyboard Shortcuts (Presenter)</summary>
@@ -168,6 +207,44 @@
         <!-- Sync Section -->
         <div class="sync-section">
             <h3>Content Selection Control</h3>
+            
+            <!-- Connection Mode Selection -->
+            <div style="margin-bottom: 15px; padding: 10px; background: #e9ecef; border-radius: 5px;">
+                <h4>Connection Mode:</h4>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 5px;">
+                        <input type="radio" name="connectionMode" value="qr" checked onchange="setConnectionMode('qr')">
+                        <span>QR Code Only (Default)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 5px;">
+                        <input type="radio" name="connectionMode" value="webrtc" onchange="setConnectionMode('webrtc')">
+                        <span>Real-time Sync (WebRTC)</span>
+                    </label>
+                </div>
+                <small style="color: #666; display: block; margin-top: 5px;">
+                    Real-time sync: Viewers connect once, then auto-update as you navigate
+                </small>
+            </div>
+            
+            <!-- WebRTC Connection Section -->
+            <div id="webrtcSection" style="display: none; margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 5px; border: 2px solid #007bff;">
+                <h4>Real-time Connection Setup</h4>
+                <div id="webrtcHost" style="display: none;">
+                    <p><strong>Step 1:</strong> Share this connection code with viewers:</p>
+                    <div id="connectionCode" style="background: #fff; padding: 10px; border-radius: 4px; font-family: monospace; word-break: break-all; border: 1px solid #ddd; margin: 10px 0;"></div>
+                    <button onclick="copyConnectionCode()">Copy Connection Code</button>
+                    <button onclick="generateNewConnection()">Generate New Code</button>
+                    <div id="connectedViewers" style="margin-top: 10px; padding: 10px; background: #d4edda; border-radius: 4px; display: none;">
+                        <strong>Connected Viewers:</strong> <span id="viewerCount">0</span>
+                    </div>
+                </div>
+                <div id="webrtcViewer" style="display: none;">
+                    <p><strong>Step 1:</strong> Enter the connection code from the presenter:</p>
+                    <textarea id="connectionCodeInput" placeholder="Paste connection code here..." style="width: 100%; height: 80px; margin: 10px 0;"></textarea>
+                    <button onclick="connectToPresenter()">Connect to Presenter</button>
+                    <div id="connectionStatus" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
+                </div>
+            </div>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                 <div>
@@ -302,6 +379,24 @@
         let currentPdfName = '';
         let autoRefreshInterval = null;
         
+        // WebRTC variables
+        let connectionMode = 'qr';
+        let isPresenter = false;
+        let peerConnection = null;
+        let dataChannel = null;
+        let connectedPeers = new Map();
+        let connectionCode = '';
+        
+        // WebRTC configuration using free STUN servers
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.services.mozilla.com' }
+            ]
+        };
+        
         // Set device name based on user agent
         const deviceName = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 
             'Mobile-' + Math.random().toString(36).substr(2, 3) : 
@@ -342,7 +437,262 @@
             }
         });
         
-        function updatePdfSelection() {
+        function setConnectionMode(mode) {
+            connectionMode = mode;
+            const webrtcSection = document.getElementById('webrtcSection');
+            const webrtcHost = document.getElementById('webrtcHost');
+            const webrtcViewer = document.getElementById('webrtcViewer');
+            
+            if (mode === 'webrtc') {
+                webrtcSection.style.display = 'block';
+                
+                // Ask user if they are presenter or viewer
+                const isPresenterChoice = confirm('Are you the PRESENTER (who will control the PDFs)?\n\nClick OK for Presenter\nClick Cancel for Viewer');
+                
+                if (isPresenterChoice) {
+                    isPresenter = true;
+                    webrtcHost.style.display = 'block';
+                    webrtcViewer.style.display = 'none';
+                    initializePresenter();
+                } else {
+                    isPresenter = false;
+                    webrtcHost.style.display = 'none';
+                    webrtcViewer.style.display = 'block';
+                }
+            } else {
+                webrtcSection.style.display = 'none';
+                cleanupWebRTC();
+            }
+        }
+        
+        async function initializePresenter() {
+            try {
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Create data channel for sending PDF updates
+                dataChannel = peerConnection.createDataChannel('pdfSync', {
+                    ordered: true
+                });
+                
+                dataChannel.onopen = () => {
+                    showStatus('Data channel opened - ready to sync PDFs', 'success');
+                };
+                
+                dataChannel.onmessage = (event) => {
+                    handleDataChannelMessage(JSON.parse(event.data));
+                };
+                
+                // Handle incoming viewer connections
+                peerConnection.ondatachannel = (event) => {
+                    const channel = event.channel;
+                    channel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                };
+                
+                // Create offer for viewers to connect
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                // Wait for ICE gathering to complete
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                // Generate connection code
+                connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                document.getElementById('connectionCode').textContent = connectionCode;
+                
+                // Monitor connection state
+                peerConnection.onconnectionstatechange = () => {
+                    updateViewerCount();
+                };
+                
+                showStatus('Presenter initialized. Share the connection code with viewers.', 'success');
+                
+            } catch (error) {
+                showStatus('Failed to initialize presenter: ' + error.message, 'error');
+                console.error('WebRTC initialization error:', error);
+            }
+        }
+        
+        async function connectToPresenter() {
+            const codeInput = document.getElementById('connectionCodeInput').value.trim();
+            
+            if (!codeInput) {
+                showStatus('Please enter the connection code from the presenter', 'error');
+                return;
+            }
+            
+            try {
+                const offer = JSON.parse(atob(codeInput));
+                
+                peerConnection = new RTCPeerConnection(rtcConfig);
+                
+                // Handle data channel from presenter
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    
+                    dataChannel.onopen = () => {
+                        showConnectionStatus('Connected to presenter! PDFs will sync automatically.', 'success');
+                        
+                        // Send viewer info to presenter
+                        sendMessage({
+                            type: 'viewerConnected',
+                            deviceName: document.getElementById('deviceName').value,
+                            timestamp: new Date().toISOString()
+                        });
+                    };
+                    
+                    dataChannel.onmessage = (event) => {
+                        handleDataChannelMessage(JSON.parse(event.data));
+                    };
+                    
+                    dataChannel.onclose = () => {
+                        showConnectionStatus('Disconnected from presenter', 'error');
+                    };
+                };
+                
+                await peerConnection.setRemoteDescription(offer);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Wait for ICE gathering
+                await new Promise((resolve) => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        peerConnection.addEventListener('icegatheringstatechange', () => {
+                            if (peerConnection.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+                
+                showConnectionStatus('Connecting to presenter...', 'info');
+                
+            } catch (error) {
+                showConnectionStatus('Failed to connect: ' + error.message, 'error');
+                console.error('WebRTC connection error:', error);
+            }
+        }
+        
+        function handleDataChannelMessage(data) {
+            switch (data.type) {
+                case 'pdfSync':
+                    // Received PDF change from presenter
+                    currentPdfName = data.pdfName;
+                    
+                    // Update UI to show current selection
+                    document.getElementById('chapterSelect').value = data.section;
+                    document.getElementById('verseSelect').value = data.page;
+                    document.getElementById('selectedPdf').value = `${data.section}_${data.page}`;
+                    
+                    showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
+                    
+                    // Auto-load if local folder is set
+                    const localFolder = document.getElementById('localFolder').value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    } else {
+                        showStatus('Please enter your local folder name to load the PDF', 'info');
+                    }
+                    break;
+                    
+                case 'viewerConnected':
+                    if (isPresenter) {
+                        showStatus(`Viewer connected: ${data.deviceName}`, 'success');
+                        updateViewerCount();
+                    }
+                    break;
+            }
+        }
+        
+        function sendMessage(message) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(message));
+                return true;
+            }
+            return false;
+        }
+        
+        function broadcastPdfChange(section, page) {
+            if (connectionMode === 'webrtc' && isPresenter) {
+                const message = {
+                    type: 'pdfSync',
+                    section: parseInt(section),
+                    page: parseInt(page),
+                    pdfName: `${section}_${page}.pdf`,
+                    timestamp: new Date().toISOString()
+                };
+                
+                if (sendMessage(message)) {
+                    showStatus(`PDF synced to all connected viewers: Section ${section}, Page ${page}`, 'success');
+                } else {
+                    showStatus('No viewers connected for real-time sync', 'info');
+                }
+            }
+        }
+        
+        function copyConnectionCode() {
+            const code = document.getElementById('connectionCode').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                showStatus('Connection code copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy code. Please copy manually.', 'error');
+            });
+        }
+        
+        function generateNewConnection() {
+            if (isPresenter) {
+                cleanupWebRTC();
+                initializePresenter();
+            }
+        }
+        
+        function updateViewerCount() {
+            if (isPresenter && peerConnection) {
+                const isConnected = peerConnection.connectionState === 'connected';
+                const viewerCount = isConnected ? 1 : 0; // Simplified for demo
+                
+                document.getElementById('viewerCount').textContent = viewerCount;
+                document.getElementById('connectedViewers').style.display = viewerCount > 0 ? 'block' : 'none';
+            }
+        }
+        
+        function showConnectionStatus(message, type) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        function cleanupWebRTC() {
+            if (dataChannel) {
+                dataChannel.close();
+                dataChannel = null;
+            }
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            connectedPeers.clear();
+        }
             const section = document.getElementById('chapterSelect').value;
             const page = document.getElementById('verseSelect').value;
             const generateBtn = document.getElementById('generateBtn');
@@ -415,9 +765,12 @@
             // Update PDF selection
             updatePdfSelection();
             
-            // Auto-sync if enabled
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(section, page);
+            
+            // Auto-sync QR code if enabled
             if (document.getElementById('autoSync').checked) {
-                setTimeout(generateSyncUrl, 100); // Small delay to ensure UI updates
+                setTimeout(generateSyncUrl, 100);
             }
             
             showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
@@ -447,9 +800,12 @@
             // Update PDF selection
             updatePdfSelection();
             
-            // Auto-sync if enabled
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(section, page);
+            
+            // Auto-sync QR code if enabled
             if (document.getElementById('autoSync').checked) {
-                setTimeout(generateSyncUrl, 100); // Small delay to ensure UI updates
+                setTimeout(generateSyncUrl, 100);
             }
             
             showStatus(`Navigated to Section ${section}, Page ${page}`, 'info');
@@ -459,6 +815,9 @@
             document.getElementById('chapterSelect').value = '1';
             document.getElementById('verseSelect').value = '1';
             updatePdfSelection();
+            
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(1, 1);
             
             if (document.getElementById('autoSync').checked) {
                 setTimeout(generateSyncUrl, 100);
@@ -471,6 +830,9 @@
             document.getElementById('chapterSelect').value = '14';
             document.getElementById('verseSelect').value = '20';
             updatePdfSelection();
+            
+            // Broadcast to WebRTC viewers
+            broadcastPdfChange(14, 20);
             
             if (document.getElementById('autoSync').checked) {
                 setTimeout(generateSyncUrl, 100);
