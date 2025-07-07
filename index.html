@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Sync for GitHub Pages</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script>
+        // Fallback QR code generation if CDN fails
+        if (typeof QRCode === 'undefined') {
+            console.warn('Primary QR Code library failed to load, trying alternative...');
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
+            script.onerror = function() {
+                console.error('All QR Code libraries failed to load');
+            };
+            document.head.appendChild(script);
+        }
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -239,6 +251,17 @@
                 <h4>Scan this QR code on other devices:</h4>
                 <div class="qr-container">
                     <canvas id="qrcode"></canvas>
+                    <div id="qrFallback" style="display: none;">
+                        <p style="color: #dc3545; font-weight: bold;">QR Code generation unavailable. Use this URL instead:</p>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; word-break: break-all; font-family: monospace; border: 2px dashed #007bff;">
+                            <span id="fallbackUrl"></span>
+                        </div>
+                        <p style="margin-top: 10px; color: #666;">
+                            <strong>Alternative:</strong> Generate QR code at 
+                            <a href="https://qr-code-generator.com/" target="_blank">qr-code-generator.com</a> 
+                            using the URL above
+                        </p>
+                    </div>
                 </div>
                 
                 <h4>Or visit this URL:</h4>
@@ -474,24 +497,49 @@
             
             // Display URL
             document.getElementById('syncUrl').textContent = syncUrl;
+            document.getElementById('fallbackUrl').textContent = syncUrl;
             
-            // Generate QR code
-            const canvas = document.getElementById('qrcode');
-            QRCode.toCanvas(canvas, syncUrl, {
-                width: 256,
-                margin: 2,
-                color: {
-                    dark: '#000000',
-                    light: '#FFFFFF'
-                }
-            }, function(error) {
-                if (error) {
-                    showStatus('Failed to generate QR code: ' + error.message, 'error');
-                } else {
-                    document.getElementById('qrSection').style.display = 'block';
-                    showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
-                }
-            });
+            // Show the section first
+            document.getElementById('qrSection').style.display = 'block';
+            
+            // Try to generate QR code
+            if (typeof QRCode !== 'undefined') {
+                const canvas = document.getElementById('qrcode');
+                
+                // Clear any existing QR code
+                const context = canvas.getContext('2d');
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                
+                showStatus('Generating QR code...', 'info');
+                
+                QRCode.toCanvas(canvas, syncUrl, {
+                    width: 256,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                }, function(error) {
+                    if (error) {
+                        console.error('QR Code generation error:', error);
+                        showQRFallback();
+                        showStatus('QR code generation failed, showing URL instead', 'error');
+                    } else {
+                        document.getElementById('qrcode').style.display = 'block';
+                        document.getElementById('qrFallback').style.display = 'none';
+                        showStatus(`QR code generated for Section ${section}, Page ${page}`, 'success');
+                    }
+                });
+            } else {
+                // QR library not available, show fallback
+                showQRFallback();
+                showStatus('QR code library not available, showing URL instead', 'info');
+            }
+        }
+        
+        function showQRFallback() {
+            document.getElementById('qrcode').style.display = 'none';
+            document.getElementById('qrFallback').style.display = 'block';
         }
         
         function clearSync() {
