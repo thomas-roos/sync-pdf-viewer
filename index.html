@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Sync for GitHub Pages - Working Version</title>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .container { max-width: 800px; margin: 0 auto; }
@@ -343,7 +344,27 @@
                 });
                 
                 // Store connection code for QR code inclusion
-                connectionCode = btoa(JSON.stringify(peerConnection.localDescription));
+                const connectionData = JSON.stringify(peerConnection.localDescription);
+                
+                // Compress the connection data to make QR code smaller
+                if (typeof pako !== 'undefined') {
+                    try {
+                        // Convert to UTF-8 array
+                        const uint8Array = new TextEncoder().encode(connectionData);
+                        // Compress
+                        const compressed = pako.deflate(uint8Array);
+                        // Convert to base64
+                        connectionCode = btoa(String.fromCharCode.apply(null, compressed));
+                        console.log('Connection data compressed: Original size:', connectionData.length, 'Compressed size:', connectionCode.length);
+                    } catch (error) {
+                        console.error('Compression failed, using uncompressed data:', error);
+                        connectionCode = btoa(connectionData);
+                    }
+                } else {
+                    console.warn('Pako compression library not available, using uncompressed data');
+                    connectionCode = btoa(connectionData);
+                }
+                
                 console.log('Connection code generated, length:', connectionCode.length);
                 showStatus('Real-time sync initialized - QR codes will auto-connect viewers', 'success');
                 
@@ -362,7 +383,32 @@
                 console.log('Connecting to presenter via QR...');
                 showStatus('Connecting to presenter...', 'info');
                 
-                const offer = JSON.parse(atob(connectionData));
+                let offerData;
+                
+                // Try to decompress the connection data
+                if (typeof pako !== 'undefined') {
+                    try {
+                        // Convert base64 to binary string
+                        const binaryString = atob(connectionData);
+                        // Convert to Uint8Array
+                        const uint8Array = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            uint8Array[i] = binaryString.charCodeAt(i);
+                        }
+                        // Decompress
+                        const decompressed = pako.inflate(uint8Array);
+                        // Convert back to string
+                        const decompressedStr = new TextDecoder().decode(decompressed);
+                        offerData = JSON.parse(decompressedStr);
+                        console.log('Connection data decompressed successfully');
+                    } catch (error) {
+                        console.error('Decompression failed, trying uncompressed data:', error);
+                        offerData = JSON.parse(atob(connectionData));
+                    }
+                } else {
+                    console.warn('Pako compression library not available, using uncompressed data');
+                    offerData = JSON.parse(atob(connectionData));
+                }
                 
                 peerConnection = new RTCPeerConnection(rtcConfig);
                 
@@ -390,7 +436,7 @@
                     };
                 };
                 
-                await peerConnection.setRemoteDescription(offer);
+                await peerConnection.setRemoteDescription(offerData);
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 
@@ -423,6 +469,12 @@
                     document.getElementById('verseSelect').value = data.page.toString();
                     document.getElementById('selectedPdf').value = `${data.section}_${data.page}`;
                     currentPdfName = `${data.section}_${data.page}.pdf`;
+                    
+                    // Update UI and load PDF if folder is set
+                    const localFolder = document.getElementById('localFolder')?.value;
+                    if (localFolder) {
+                        loadCurrentPDF();
+                    }
                     
                     showStatus(`PDF synced: Section ${data.section}, Page ${data.page}`, 'success');
                     break;
