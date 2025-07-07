@@ -464,7 +464,54 @@
             }
         });
         
-        async function initializePresenter() {
+        function updatePdfSelection() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const generateBtn = document.getElementById('generateBtn');
+            const navigationControls = document.getElementById('navigationControls');
+            
+            if (section && page) {
+                const pdfName = `${section}_${page}`;
+                document.getElementById('selectedPdf').value = pdfName;
+                generateBtn.disabled = false;
+                currentPdfName = `${pdfName}.pdf`;
+                
+                // Show navigation controls and update position
+                navigationControls.style.display = 'block';
+                updateNavigationButtons();
+                updateCurrentPosition();
+            } else {
+                document.getElementById('selectedPdf').value = '';
+                generateBtn.disabled = true;
+                currentPdfName = '';
+                navigationControls.style.display = 'none';
+            }
+        }
+        
+        function updateNavigationButtons() {
+            const section = parseInt(document.getElementById('chapterSelect').value);
+            const page = parseInt(document.getElementById('verseSelect').value);
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            // Disable previous if at start (1_1)
+            prevBtn.disabled = (section === 1 && page === 1);
+            
+            // Disable next if at end (14_20)
+            nextBtn.disabled = (section === 14 && page === 20);
+        }
+        
+        function updateCurrentPosition() {
+            const section = document.getElementById('chapterSelect').value;
+            const page = document.getElementById('verseSelect').value;
+            const positionSpan = document.getElementById('currentPosition');
+            
+            if (section && page) {
+                positionSpan.textContent = `Section ${section}, Page ${page}`;
+            } else {
+                positionSpan.textContent = 'Section -, Page -';
+            }
+        }
             try {
                 updateConnectionInfo('Initializing real-time sync...', 'info');
                 
